@@ -1,0 +1,23 @@
+[package]
+name = "rpl"
+version = "0.1.0"
+authors = ["Rudo2204 <rudo2204@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lava_torrent = "0.5"
+log = "0.4"
+fern = { version = "0.6", features = ["colored"] }
+anyhow = "1.0"
+clap = "2.33.3"
+chrono = "0.4"
+directories = "3.0.2"
+fs2 = "0.4.3"
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
