@@ -1,6 +1,6 @@
 use crate::librpl::error;
 use humansize::{file_size_opts, FileSize};
-use lava_torrent::torrent::v1::{File, Torrent};
+use lava_torrent::torrent::v1::Torrent;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::path::PathBuf;
