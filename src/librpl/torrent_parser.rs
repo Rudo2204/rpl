@@ -59,6 +59,25 @@ impl<'a> PackConfig<'a> {
             .expect("File size is a negative number?")
     }
 
+    pub fn disable_all_string(&self) -> String {
+        let mut ret = String::from("");
+        match &self.torrent.files {
+            Some(vecs) => {
+                for (index, _file) in vecs.into_iter().enumerate() {
+                    if index + 1 == vecs.len() {
+                        ret.push_str(&format!("{}", index));
+                    } else {
+                        ret.push_str(&format!("{} | ", index));
+                    }
+                }
+            }
+            None => (),
+        }
+
+        ret
+    }
+
+    // Consume ConfigPack
     pub fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplTorrentFile>, error::Error> {
         let file_vecs = match &self.torrent.files {
             Some(vecs) => vecs,
