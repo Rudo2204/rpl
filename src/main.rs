@@ -4,12 +4,15 @@ use chrono::{Local, Utc};
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
 use log::{debug, info, LevelFilter};
-use std::{fs::File, io};
+use shellexpand::full_with_context;
+use std::{fs::File, io, path::PathBuf};
+use tokio::time::{sleep, Duration};
 
 mod librpl;
 use librpl::qbittorrent::QbitConfig;
 use librpl::util;
 
+use librpl::qbittorrent::TorrentDownload;
 use librpl::torrent_parser::PackConfig;
 
 pub const PROGRAM_NAME: &str = "mendo";
@@ -115,15 +118,35 @@ async fn main() -> Result<()> {
     )
     .unwrap();
 
-    let mut pack_config = PackConfig::new(torrent).max_size(max_size_allow);
-    info!("{}", &pack_config.get_pack_size_human());
+    let mut pack_config = PackConfig::new(torrent.clone()).max_size(max_size_allow);
+    info!("{}", pack_config.get_pack_size_human());
 
-    info!("Hash: {}", &pack_config.info_hash());
+    let hash = pack_config.info_hash();
+    let disable_all = pack_config.disable_all_string();
     info!("is_private: {}", &pack_config.is_private());
-    info!("{:#?}", pack_config.chunks()?);
+    debug!("{:#?}", pack_config.chunks()?);
     let addr = "http://localhost:7070";
     let qbit = QbitConfig::new("", "", addr).await?;
-    info!("App: {}", qbit.application_version().await?);
+    info!(
+        "Qbittorrent App Version: {}",
+        qbit.application_version().await?
+    );
+
+    let t = TorrentDownload::default()
+        .torrents(torrent)
+        .paused(true)
+        .save_path(PathBuf::from(
+            full_with_context("~/Videos/", util::home_dir, util::get_env)
+                .expect("Could not find the correct path to save data")
+                .into_owned(),
+        ));
+
+    qbit.add_new_torrent(t).await?;
+
+    info!("Sleeping 500ms for qbittorrent to add the torrent...");
+    sleep(Duration::from_millis(500)).await;
+
+    qbit.set_priority(hash, disable_all, 0).await?;
 
     debug!("-----Everything is finished!-----");
     log_file.unlock()?;
