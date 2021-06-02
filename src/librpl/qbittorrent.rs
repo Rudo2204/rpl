@@ -98,11 +98,35 @@ impl QbitConfig {
         Ok(headers)
     }
 
-    async fn add_new_torrent(&self, data: TorrentDownload) -> Result<(), error::Error> {
+    pub async fn add_new_torrent(&self, data: TorrentDownload) -> Result<(), error::Error> {
         let res = self
             .client
             .post(&format!("{}/api/v2/torrents/add", self.address))
             .multipart(data.build_form())
+            .headers(self.make_headers()?)
+            .send()
+            .await?;
+
+        match res.error_for_status() {
+            Ok(_) => Ok(()),
+            Err(e) => Err(error::Error::from(e)),
+        }
+    }
+
+    pub async fn set_priority(
+        &self,
+        hash: String,
+        files: String,
+        priority: u8,
+    ) -> Result<(), error::Error> {
+        let form = Form::new()
+            .text("hash", hash)
+            .text("id", files)
+            .text("priority", priority.to_string());
+        let res = self
+            .client
+            .post(&format!("{}/api/v2/torrents/filePrio", self.address))
+            .multipart(form)
             .headers(self.make_headers()?)
             .send()
             .await?;
