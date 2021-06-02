@@ -122,7 +122,7 @@ impl TorrentDownload {
             None => form,
         };
         form = match self.torrents {
-            Some(torrents) => form.part("urls", Part::bytes(torrents).file_name("")),
+            Some(torrents) => form.part("torrents", Part::bytes(torrents).file_name("")),
             None => form,
         };
         form = match self.savepath {
