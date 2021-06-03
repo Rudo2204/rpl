@@ -103,6 +103,7 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                                 ),
                             );
                             current_chunk += 1;
+                            current_sum_size = 0;
                         }
 
                         chunks.insert(
@@ -148,6 +149,7 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                             ),
                         );
                         current_chunk += 1;
+                        current_sum_size = 0;
                         debug!(
                             "Added file {} size {} index {} chunk {}",
                             file.path.to_str().unwrap(),
@@ -168,6 +170,8 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                                 current_chunk,
                             ),
                         );
+
+                        current_sum_size += file.length;
                     }
 
                     files_in_downloaded = downloaded.len();
