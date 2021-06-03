@@ -3,9 +3,13 @@ pub mod qbittorrent;
 pub mod torrent_parser;
 pub mod util;
 
-pub use crate::librpl::error as _;
+use humansize::{file_size_opts, FileSize};
+use lava_torrent::torrent::v1::Torrent;
+use log::info;
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+pub use crate::librpl::error as _;
 
 #[derive(Debug)]
 pub struct RplFile<'a> {
@@ -30,54 +34,65 @@ pub trait RplChunk<'a> {
     fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplFile<'a>>, error::Error>;
 }
 
-#[derive(Debug)]
-pub struct RplFileShort<'a> {
-    filename: &'a str,
-    length: i64,
+pub struct Queue {
+    chunk: i32,
+    total_size: i64,
+    no_files: i32,
 }
 
-pub struct Queue<'a> {
-    chunk: i32,
-    files: Vec<RplFileShort<'a>>,
+impl Queue {
+    fn new(chunk: i32, total_size: i64, no_files: i32) -> Self {
+        Self {
+            chunk,
+            total_size,
+            no_files,
+        }
+    }
+
+    fn info(&self) {
+        let avg = self.total_size / self.no_files as i64;
+        info!(
+            "Chunk {} has {} files with total size of {}. Average size per file is {}.",
+            self.chunk,
+            self.no_files,
+            self.total_size
+                .file_size(file_size_opts::BINARY)
+                .expect("File size is a negative number?"),
+            avg.file_size(file_size_opts::BINARY)
+                .expect("File size is a negative number?"),
+        )
+    }
 }
 
 pub trait RplDownload<'a, T>
 where
     T: RplChunk<'a>,
 {
-    //fn build_queue(&'a mut self) -> Result<Vec<Queue<'a>>, error::Error>;
-    fn download(&'a mut self) -> Result<(), error::Error>;
+    fn download_torrent(&'a mut self, data: Torrent) -> Result<(), error::Error>;
 }
 
-pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>) {
+pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>, torrent: Torrent) -> Vec<Queue> {
     let mut current_chunk = 0;
-    //let queue: Vec<Queue> = Vec::new();
-    loop {
-        let tmp = find_keys_for_chunk(&datamap, current_chunk);
-        if tmp.is_empty() {
-            break;
-        } else {
-            println!("{:#?}", tmp);
+    let mut total_size: i64 = 0;
+    let mut queue: Vec<Queue> = Vec::new();
+    let mut files = 0;
+    for f in torrent.files.unwrap() {
+        let file = datamap
+            .get_key_value(&f.path)
+            .expect("Could not find file in data map")
+            .1;
+
+        if file.chunk < 0 {
+            continue;
+        } else if file.chunk != current_chunk {
+            queue.push(Queue::new(current_chunk, total_size, files));
+            files = 0;
+            total_size = 0;
             current_chunk += 1;
         }
+        files += 1;
+        total_size += file.length;
     }
-}
 
-fn find_keys_for_chunk<'a>(
-    datamap: &'a HashMap<&PathBuf, RplFile<'a>>,
-    chunk: i32,
-) -> Vec<RplFileShort<'a>> {
-    datamap
-        .iter()
-        .filter_map(|(_key, val)| {
-            if val.chunk == chunk {
-                Some(RplFileShort {
-                    filename: val.filename,
-                    length: val.length,
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
+    queue
 }

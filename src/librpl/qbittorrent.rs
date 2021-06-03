@@ -12,9 +12,9 @@ use tokio::time::{sleep, Duration};
 use crate::librpl::build_queue;
 use crate::librpl::error;
 use crate::librpl::torrent_parser::TorrentPack;
+use crate::librpl::Queue;
 use crate::librpl::RplChunk;
 use crate::librpl::RplDownload;
-use crate::librpl::{Queue, RplFileShort};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
@@ -253,7 +253,7 @@ impl QbitTorrent {
         self.torrents = Some(
             torrent
                 .encode()
-                .expect("Could not encode Torrent to bencode Vec u8"),
+                .expect("Could not encode Torrent to bencode. Is torrent file corrupted?"),
         );
         self
     }
@@ -307,25 +307,12 @@ impl<'a> RplQbit for TorrentPack<'a> {
 }
 
 impl<'a> RplDownload<'a, TorrentPack<'a>> for TorrentPack<'a> {
-    //fn build_queue(&'a mut self) -> Result<Vec<Queue<'a>>, error::Error> {
-    //    let files;
-    //    if let Some(ref vecs) = self.torrent.files {
-    //        files = vecs;
-    //    } else {
-    //        return Err(error::Error::EmptyTorrent);
-    //    }
-    //    let queue: Vec<Queue> = Vec::new();
-
-    //    let mut current_chunk = 0;
-    //    let chunks = self.chunks()?;
-    //    chunk
-
-    //    Ok(queue)
-    //}
-
-    fn download(&'a mut self) -> Result<(), error::Error> {
+    fn download_torrent(&'a mut self, torrent: Torrent) -> Result<(), error::Error> {
         let chunks = self.chunks()?;
-        build_queue(chunks);
+        let queue = build_queue(chunks, torrent);
+        for q in queue {
+            q.info();
+        }
         Ok(())
     }
 }
