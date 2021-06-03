@@ -4,9 +4,11 @@
 use crate::librpl::error;
 use derive_builder::Builder;
 use lava_torrent::torrent::v1::Torrent;
+use log::debug;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
@@ -108,7 +110,11 @@ impl QbitConfig {
             .await?;
 
         match res.error_for_status() {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                debug!("Sleeping 500ms for qbittorrent to add the torrent...");
+                sleep(Duration::from_millis(500)).await;
+                Ok(())
+            }
             Err(e) => Err(error::Error::from(e)),
         }
     }

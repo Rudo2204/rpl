@@ -6,7 +6,6 @@ use fs2::FileExt;
 use log::{debug, info, LevelFilter};
 use shellexpand::full_with_context;
 use std::{fs::File, io, path::PathBuf};
-use tokio::time::{sleep, Duration};
 
 mod librpl;
 use librpl::qbittorrent::QbitConfig;
@@ -142,10 +141,6 @@ async fn main() -> Result<()> {
         ));
 
     qbit.add_new_torrent(t).await?;
-
-    info!("Sleeping 500ms for qbittorrent to add the torrent...");
-    sleep(Duration::from_millis(500)).await;
-
     qbit.set_priority(hash, disable_all, 0).await?;
 
     debug!("-----Everything is finished!-----");
