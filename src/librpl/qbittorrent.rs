@@ -9,9 +9,12 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
+use crate::librpl::build_queue;
 use crate::librpl::error;
 use crate::librpl::torrent_parser::TorrentPack;
+use crate::librpl::RplChunk;
 use crate::librpl::RplDownload;
+use crate::librpl::{Queue, RplFileShort};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
@@ -303,6 +306,26 @@ impl<'a> RplQbit for TorrentPack<'a> {
     }
 }
 
-//impl RplDownload<'a> for TorrentPack<'a> {
-//    fn download(&self) -> R
-//}
+impl<'a> RplDownload<'a, TorrentPack<'a>> for TorrentPack<'a> {
+    //fn build_queue(&'a mut self) -> Result<Vec<Queue<'a>>, error::Error> {
+    //    let files;
+    //    if let Some(ref vecs) = self.torrent.files {
+    //        files = vecs;
+    //    } else {
+    //        return Err(error::Error::EmptyTorrent);
+    //    }
+    //    let queue: Vec<Queue> = Vec::new();
+
+    //    let mut current_chunk = 0;
+    //    let chunks = self.chunks()?;
+    //    chunk
+
+    //    Ok(queue)
+    //}
+
+    fn download(&'a mut self) -> Result<(), error::Error> {
+        let chunks = self.chunks()?;
+        build_queue(chunks);
+        Ok(())
+    }
+}
