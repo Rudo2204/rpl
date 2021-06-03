@@ -9,9 +9,9 @@ use crate::librpl::RplChunk;
 use crate::librpl::RplFile;
 
 pub struct TorrentPack<'a> {
-    pub max_size_allow: i64,
+    max_size_allow: i64,
     pub torrent: Torrent,
-    pub downloaded_file: Option<HashMap<&'a PathBuf, RplFile<'a>>>,
+    downloaded_file: Option<HashMap<&'a PathBuf, RplFile<'a>>>,
 }
 
 impl<'a> TorrentPack<'a> {
@@ -75,8 +75,13 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                             RplFile::new(file.path.to_str().unwrap(), file.length, false, -1),
                         );
 
+                        chunks.insert(
+                            &file.path,
+                            RplFile::new(file.path.to_str().unwrap(), file.length, false, -1),
+                        );
+
                         warn!(
-                            "File {} has size {} which is larger than maximum size allowed {}. This file will be skipped.",
+                            "File `{}` has size {} which is larger than maximum size allowed {}. This file will be skipped.",
                             file.path
                                 .to_str()
                                 .expect("Could not convert file path to str"),
