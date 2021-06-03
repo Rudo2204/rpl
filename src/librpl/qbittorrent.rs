@@ -142,6 +142,50 @@ impl QbitConfig {
             Err(e) => Err(error::Error::from(e)),
         }
     }
+
+    pub async fn resume_torrent(&self, hash: String) -> Result<(), error::Error> {
+        let form = Form::new().text("hash", hash);
+
+        let res = self
+            .client
+            .post(&format!("{}/api/v2/torrents/resume", self.address))
+            .multipart(form)
+            .headers(self.make_headers()?)
+            .send()
+            .await?;
+
+        match res.error_for_status() {
+            Ok(_) => Ok(()),
+            Err(e) => Err(error::Error::from(e)),
+        }
+    }
+
+    pub async fn delete_torrent(
+        &self,
+        hash: String,
+        delete_files: bool,
+    ) -> Result<(), error::Error> {
+        let form = Form::new()
+            .text("hash", hash)
+            .text("deleteFiles", delete_files.to_string());
+
+        let res = self
+            .client
+            .post(&format!("{}/api/v2/torrents/delete", self.address))
+            .multipart(form)
+            .headers(self.make_headers()?)
+            .send()
+            .await?;
+
+        match res.error_for_status() {
+            Ok(_) => {
+                debug!("Sleeping 500ms for qbittorrent to delete the torrent...");
+                sleep(Duration::from_millis(500)).await;
+                Ok(())
+            }
+            Err(e) => Err(error::Error::from(e)),
+        }
+    }
 }
 
 impl TorrentDownload {
