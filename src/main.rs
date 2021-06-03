@@ -11,7 +11,7 @@ mod librpl;
 use librpl::qbittorrent::QbitConfig;
 use librpl::util;
 
-use librpl::qbittorrent::{RplQbit, TorrentDownload};
+use librpl::qbittorrent::{QbitTorrent, RplQbit};
 use librpl::torrent_parser::TorrentPack;
 use librpl::RplChunk;
 
@@ -132,7 +132,7 @@ async fn main() -> Result<()> {
         qbit.application_version().await?
     );
 
-    let t = TorrentDownload::default()
+    let t = QbitTorrent::default()
         .torrents(torrent)
         .paused(true)
         .save_path(PathBuf::from(

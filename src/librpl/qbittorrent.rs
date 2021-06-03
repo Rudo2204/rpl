@@ -11,10 +11,11 @@ use tokio::time::{sleep, Duration};
 
 use crate::librpl::error;
 use crate::librpl::torrent_parser::TorrentPack;
+use crate::librpl::RplDownload;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
-pub struct TorrentDownload {
+pub struct QbitTorrent {
     #[builder(default)]
     urls: Option<String>,
     #[builder(default)]
@@ -102,7 +103,7 @@ impl QbitConfig {
         Ok(headers)
     }
 
-    pub async fn add_new_torrent(&self, data: TorrentDownload) -> Result<(), error::Error> {
+    pub async fn add_new_torrent(&self, data: QbitTorrent) -> Result<(), error::Error> {
         let res = self
             .client
             .post(&format!("{}/api/v2/torrents/add", self.address))
@@ -190,7 +191,7 @@ impl QbitConfig {
     }
 }
 
-impl TorrentDownload {
+impl QbitTorrent {
     fn build_form(self) -> Form {
         let mut form = Form::new();
         form = match self.urls {
@@ -301,3 +302,7 @@ impl<'a> RplQbit for TorrentPack<'a> {
         ret
     }
 }
+
+//impl RplDownload<'a> for TorrentPack<'a> {
+//    fn download(&self) -> R
+//}
