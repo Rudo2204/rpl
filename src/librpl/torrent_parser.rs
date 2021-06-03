@@ -1,36 +1,20 @@
-use crate::librpl::error;
 use humansize::{file_size_opts, FileSize};
 use lava_torrent::torrent::v1::Torrent;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub struct PackConfig<'a> {
-    max_size_allow: i64,
-    torrent: Torrent,
-    downloaded_file: Option<HashMap<&'a PathBuf, RplTorrentFile>>,
+use crate::librpl::error;
+use crate::librpl::RplChunk;
+use crate::librpl::RplFile;
+
+pub struct TorrentPack<'a> {
+    pub max_size_allow: i64,
+    pub torrent: Torrent,
+    pub downloaded_file: Option<HashMap<&'a PathBuf, RplFile<'a>>>,
 }
 
-#[derive(Debug)]
-pub struct RplTorrentFile {
-    id: usize,
-    length: i64,
-    downloaded: bool,
-    chunk: i32,
-}
-
-impl RplTorrentFile {
-    fn new(id: usize, length: i64, downloaded: bool, chunk: i32) -> Self {
-        Self {
-            id,
-            length,
-            downloaded,
-            chunk,
-        }
-    }
-}
-
-impl<'a> PackConfig<'a> {
+impl<'a> TorrentPack<'a> {
     pub fn new(torrent: Torrent) -> Self {
         Self {
             max_size_allow: 0,
@@ -58,27 +42,10 @@ impl<'a> PackConfig<'a> {
             .file_size(file_size_opts::BINARY)
             .expect("File size is a negative number?")
     }
+}
 
-    pub fn disable_all_string(&self) -> String {
-        let mut ret = String::from("");
-        match &self.torrent.files {
-            Some(vecs) => {
-                for (index, _file) in vecs.into_iter().enumerate() {
-                    if index + 1 == vecs.len() {
-                        ret.push_str(&format!("{}", index));
-                    } else {
-                        ret.push_str(&format!("{} | ", index));
-                    }
-                }
-            }
-            None => (),
-        }
-
-        ret
-    }
-
-    // Consume ConfigPack
-    pub fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplTorrentFile>, error::Error> {
+impl<'a> RplChunk<'a> for TorrentPack<'a> {
+    fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplFile<'a>>, error::Error> {
         let file_vecs = match &self.torrent.files {
             Some(vecs) => vecs,
             None => return Err(error::Error::EmptyTorrent),
@@ -93,7 +60,7 @@ impl<'a> PackConfig<'a> {
         let mut files_in_downloaded = downloaded.len();
         let files_in_pack = file_vecs.len();
 
-        let mut chunks: HashMap<&PathBuf, RplTorrentFile> = HashMap::new();
+        let mut chunks: HashMap<&PathBuf, RplFile> = HashMap::new();
         let mut current_chunk: i32 = 0;
 
         while files_in_downloaded != files_in_pack {
@@ -105,7 +72,7 @@ impl<'a> PackConfig<'a> {
                     if file.length > self.max_size_allow {
                         downloaded.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, false, -1),
+                            RplFile::new(file.path.to_str().unwrap(), file.length, false, -1),
                         );
 
                         warn!(
@@ -122,20 +89,30 @@ impl<'a> PackConfig<'a> {
                     } else if index + 1 == files_in_pack {
                         downloaded.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, -1),
+                            RplFile::new(&file.path.to_str().unwrap(), file.length, true, -1),
                         );
 
                         if current_sum_size + file.length > self.max_size_allow {
                             chunks.insert(
                                 &file.path,
-                                RplTorrentFile::new(index, file.length, true, current_chunk),
+                                RplFile::new(
+                                    &file.path.to_str().unwrap(),
+                                    file.length,
+                                    true,
+                                    current_chunk,
+                                ),
                             );
                             current_chunk += 1;
                         }
 
                         chunks.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, current_chunk),
+                            RplFile::new(
+                                &file.path.to_str().unwrap(),
+                                file.length,
+                                true,
+                                current_chunk,
+                            ),
                         );
                     } else if current_sum_size + file.length <= self.max_size_allow {
                         debug!(
@@ -147,18 +124,28 @@ impl<'a> PackConfig<'a> {
                         );
                         downloaded.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, -1),
+                            RplFile::new(&file.path.to_str().unwrap(), file.length, true, -1),
                         );
 
                         chunks.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, current_chunk),
+                            RplFile::new(
+                                &file.path.to_str().unwrap(),
+                                file.length,
+                                true,
+                                current_chunk,
+                            ),
                         );
                         current_sum_size += file.length;
                     } else {
                         chunks.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, current_chunk),
+                            RplFile::new(
+                                &file.path.to_str().unwrap(),
+                                file.length,
+                                true,
+                                current_chunk,
+                            ),
                         );
                         current_chunk += 1;
                         debug!(
@@ -170,11 +157,16 @@ impl<'a> PackConfig<'a> {
                         );
                         downloaded.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, -1),
+                            RplFile::new(&file.path.to_str().unwrap(), file.length, true, -1),
                         );
                         chunks.insert(
                             &file.path,
-                            RplTorrentFile::new(index, file.length, true, current_chunk),
+                            RplFile::new(
+                                &file.path.to_str().unwrap(),
+                                file.length,
+                                true,
+                                current_chunk,
+                            ),
                         );
                     }
 

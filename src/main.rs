@@ -11,8 +11,9 @@ mod librpl;
 use librpl::qbittorrent::QbitConfig;
 use librpl::util;
 
-use librpl::qbittorrent::TorrentDownload;
-use librpl::torrent_parser::PackConfig;
+use librpl::qbittorrent::{RplQbit, TorrentDownload};
+use librpl::torrent_parser::TorrentPack;
+use librpl::RplChunk;
 
 pub const PROGRAM_NAME: &str = "mendo";
 
@@ -117,7 +118,7 @@ async fn main() -> Result<()> {
     )
     .unwrap();
 
-    let mut pack_config = PackConfig::new(torrent.clone()).max_size(max_size_allow);
+    let mut pack_config = TorrentPack::new(torrent.clone()).max_size(max_size_allow);
     info!("{}", pack_config.get_pack_size_human());
 
     let hash = pack_config.info_hash();

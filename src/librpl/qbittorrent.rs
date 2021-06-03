@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use crate::librpl::error;
 use derive_builder::Builder;
 use lava_torrent::torrent::v1::Torrent;
 use log::debug;
@@ -9,6 +8,9 @@ use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
+
+use crate::librpl::error;
+use crate::librpl::torrent_parser::TorrentPack;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
@@ -273,5 +275,29 @@ impl TorrentDownload {
             false => Some(String::from("false")),
         };
         self
+    }
+}
+
+pub trait RplQbit {
+    fn disable_all_string(&self) -> String;
+}
+
+impl<'a> RplQbit for TorrentPack<'a> {
+    fn disable_all_string(&self) -> String {
+        let mut ret = String::from("");
+        match &self.torrent.files {
+            Some(vecs) => {
+                for (index, _file) in vecs.into_iter().enumerate() {
+                    if index + 1 == vecs.len() {
+                        ret.push_str(&format!("{}", index));
+                    } else {
+                        ret.push_str(&format!("{} | ", index));
+                    }
+                }
+            }
+            None => (),
+        }
+
+        ret
     }
 }
