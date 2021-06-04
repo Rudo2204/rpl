@@ -33,3 +33,7 @@ panic = "unwind"
 
 [profile.release]
 panic = "unwind"
+
+[[bin]]
+name = "pl"
+path = "src/main.rs"
