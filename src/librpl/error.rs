@@ -20,4 +20,6 @@ pub enum Error {
     EmptyTorrent,
     #[error("qBittorrent returned nothing for the hash provided")]
     QbitEmptyTorrentInfo,
+    #[error("qBittorrent client: The torrent has encountered an unexpected error")]
+    QbitTorrentErrored,
 }
