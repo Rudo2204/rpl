@@ -3,10 +3,14 @@
 
 use async_trait::async_trait;
 use derive_builder::Builder;
+use derive_getters::Getters;
+use indicatif::{ProgressBar, ProgressStyle};
 use lava_torrent::torrent::v1::Torrent;
 use log::{debug, info};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
+use std::convert::TryInto;
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
@@ -28,7 +32,7 @@ enum TorrentFilter {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-enum State {
+pub enum State {
     #[serde(rename = "error")]
     Error,
     #[serde(rename = "missingFiles")]
@@ -65,11 +69,11 @@ enum State {
     CheckingResumeData,
     #[serde(rename = "moving")]
     Moving,
-    #[serde(rename = "unkown")]
+    #[serde(rename = "unknown")]
     Unknown,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Getters)]
 pub struct QbitTorrentInfo {
     added_on: i32,
     amount_left: u64,
@@ -78,7 +82,7 @@ pub struct QbitTorrentInfo {
     completed: i64,
     completion_on: i32,
     dl_limit: i64,
-    dlspeed: i64,
+    dlspeed: u64,
     downloaded: i64,
     downloaded_session: i64,
     eta: i64,
@@ -252,8 +256,8 @@ impl QbitConfig {
         }
     }
 
-    pub async fn resume_torrent(&self, hash: String) -> Result<(), error::Error> {
-        let form = Form::new().text("hash", hash);
+    pub async fn resume_torrent(&self, hash: &str) -> Result<(), error::Error> {
+        let form = Form::new().text("hash", hash.to_string());
 
         let res = self
             .client
@@ -437,7 +441,8 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
                 None => (),
             }
             info!("Downloading chunk {}", job.chunk);
-            sleep(Duration::from_secs(5)).await;
+            //sleep(Duration::from_secs(5)).await;
+            job.download(&client, &hash).await?;
             info!("Finished chunk {}", job.chunk);
 
             client.delete_torrent(&hash, false).await?;
@@ -448,10 +453,13 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
     }
 }
 
+#[async_trait]
 trait RplQbit {
     fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String>;
+    async fn download(&self, client: &QbitConfig, hash: &str) -> Result<(), error::Error>;
 }
 
+#[async_trait]
 impl RplQbit for Job {
     fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String> {
         let mut disable_others = String::new();
@@ -465,5 +473,51 @@ impl RplQbit for Job {
             false => Some(disable_others),
             true => None,
         }
+    }
+
+    async fn download(&self, client: &QbitConfig, hash: &str) -> Result<(), error::Error> {
+        //client.resume_torrent(hash).await?;
+        let torrent_info = client.get_torrent_info(hash).await?;
+        let size = self.total_size as u64;
+        let _asd_dl_speed = torrent_info.dlspeed;
+        let dl_speed: u64 = (20_f32 * u32::pow(1024, 2) as f32) as u64;
+        let mut downloaded: u64 = 0;
+
+        let pb = ProgressBar::new(size.try_into().expect("Torrent size is negative?"));
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .progress_chars("#>-"));
+
+        pb.set_message(format!("Downloading chunk {}", self.chunk));
+
+        loop {
+            let current_info = client.get_torrent_info(hash).await?;
+            let state = current_info.state();
+            match state {
+                // Should be in debug mode only
+                State::PausedDL => {
+                    break;
+                }
+                State::Error => return Err(error::Error::QbitTorrentErrored),
+                State::Downloading | State::StalledDL => {
+                    let new = min(downloaded + dl_speed, size);
+                    downloaded = new;
+                    pb.set_position(new);
+                    sleep(Duration::from_millis(1000)).await;
+                }
+                State::PausedUP | State::StalledUP | State::Uploading | State::QueuedUP => {
+                    return Ok(())
+                }
+                _ => (),
+            }
+        }
+
+        while downloaded < size {
+            let new = min(downloaded + dl_speed, size);
+            downloaded = new;
+            pb.set_position(new);
+            sleep(Duration::from_millis(20)).await;
+        }
+        return Ok(());
     }
 }
