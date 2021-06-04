@@ -24,6 +24,7 @@ serde_json = "1.0.64"
 serde_urlencoded = "0.7.0"
 derive_builder = "0.10.2"
 shellexpand = "2.1.0"
+async-trait = "0.1.50"
 
 [profile.dev]
 panic = "unwind"
