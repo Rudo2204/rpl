@@ -42,6 +42,12 @@ impl<'a> TorrentPack<'a> {
             .file_size(file_size_opts::BINARY)
             .expect("File size is a negative number?")
     }
+
+    pub fn get_max_size_chunk_human(&self) -> String {
+        self.max_size_allow
+            .file_size(file_size_opts::BINARY)
+            .expect("File size is a negative number?")
+    }
 }
 
 impl<'a> RplChunk<'a> for TorrentPack<'a> {
