@@ -3,6 +3,7 @@ pub mod qbittorrent;
 pub mod torrent_parser;
 pub mod util;
 
+use async_trait::async_trait;
 use humansize::{file_size_opts, FileSize};
 use lava_torrent::torrent::v1::Torrent;
 use log::info;
@@ -10,6 +11,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub use crate::librpl::error as _;
+pub use crate::librpl::qbittorrent::QbitConfig;
+
+pub trait RplClient {}
+pub trait RplPackConfig {}
 
 #[derive(Debug)]
 pub struct RplFile<'a> {
@@ -34,13 +39,13 @@ pub trait RplChunk<'a> {
     fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplFile<'a>>, error::Error>;
 }
 
-pub struct Queue {
+pub struct Job {
     chunk: i32,
     total_size: i64,
     no_files: i32,
 }
 
-impl Queue {
+impl Job {
     fn new(chunk: i32, total_size: i64, no_files: i32) -> Self {
         Self {
             chunk,
@@ -64,19 +69,42 @@ impl Queue {
     }
 }
 
-pub trait RplDownload<'a, T>
+#[async_trait]
+pub trait RplDownload<'a, T, P, C>
 where
     T: RplChunk<'a>,
+    P: RplPackConfig,
+    C: RplClient,
 {
-    fn download_torrent(&'a mut self, data: Torrent) -> Result<(), error::Error>;
+    async fn download_torrent(
+        &'a mut self,
+        data: Torrent,
+        config: P,
+        client: C,
+    ) -> Result<(), error::Error>;
 }
 
-pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>, torrent: Torrent) -> Vec<Queue> {
+pub struct Queue {
+    no_all_files: i32,
+    job: Vec<Job>,
+}
+
+impl Queue {
+    fn new(no_all_files: i32, job: Vec<Job>) -> Self {
+        Self { no_all_files, job }
+    }
+}
+
+pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>, torrent: Torrent) -> Queue {
     let mut current_chunk = 0;
     let mut total_size: i64 = 0;
-    let mut queue: Vec<Queue> = Vec::new();
+    let mut job: Vec<Job> = Vec::new();
     let mut files = 0;
+    let mut no_all_files: i32 = 0;
+
     for f in torrent.files.unwrap() {
+        no_all_files += 1;
+
         let file = datamap
             .get_key_value(&f.path)
             .expect("Could not find file in data map")
@@ -85,7 +113,7 @@ pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>, torrent: Torrent
         if file.chunk < 0 {
             continue;
         } else if file.chunk != current_chunk {
-            queue.push(Queue::new(current_chunk, total_size, files));
+            job.push(Job::new(current_chunk, total_size, files));
             files = 0;
             total_size = 0;
             current_chunk += 1;
@@ -94,5 +122,7 @@ pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>, torrent: Torrent
         total_size += file.length;
     }
 
-    queue
+    // finish off last chunk
+    job.push(Job::new(current_chunk, total_size, files));
+    Queue::new(no_all_files, job)
 }
