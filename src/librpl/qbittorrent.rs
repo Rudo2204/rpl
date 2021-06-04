@@ -1,20 +1,17 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
+use async_trait::async_trait;
 use derive_builder::Builder;
 use lava_torrent::torrent::v1::Torrent;
-use log::debug;
+use log::{debug, info};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
-use crate::librpl::build_queue;
-use crate::librpl::error;
 use crate::librpl::torrent_parser::TorrentPack;
-use crate::librpl::Queue;
-use crate::librpl::RplChunk;
-use crate::librpl::RplDownload;
+use crate::librpl::{build_queue, error, Job, RplChunk, RplClient, RplDownload, RplPackConfig};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
@@ -48,6 +45,9 @@ pub struct QbitConfig {
     address: String,
     client: reqwest::Client,
 }
+
+impl RplClient for QbitConfig {}
+impl RplPackConfig for QbitTorrent {}
 
 impl QbitConfig {
     pub async fn new(username: &str, password: &str, address: &str) -> Result<Self, error::Error> {
@@ -127,13 +127,13 @@ impl QbitConfig {
 
     pub async fn set_priority(
         &self,
-        hash: String,
-        files: String,
+        hash: &str,
+        files: &str,
         priority: u8,
     ) -> Result<(), error::Error> {
         let form = Form::new()
-            .text("hash", hash)
-            .text("id", files)
+            .text("hash", hash.to_string())
+            .text("id", files.to_string())
             .text("priority", priority.to_string());
         let res = self
             .client
@@ -166,13 +166,9 @@ impl QbitConfig {
         }
     }
 
-    pub async fn delete_torrent(
-        &self,
-        hash: String,
-        delete_files: bool,
-    ) -> Result<(), error::Error> {
+    pub async fn delete_torrent(&self, hash: &str, delete_files: bool) -> Result<(), error::Error> {
         let form = Form::new()
-            .text("hash", hash)
+            .text("hashes", hash.to_string())
             .text("deleteFiles", delete_files.to_string());
 
         let res = self
@@ -240,10 +236,6 @@ impl QbitTorrent {
         form
     }
 
-    pub async fn download(self, qbit: &QbitConfig) -> Result<(), error::Error> {
-        qbit.add_new_torrent(self).await
-    }
-
     pub fn url(mut self, url: String) -> Self {
         self.urls = Some(url);
         self
@@ -282,37 +274,65 @@ impl QbitTorrent {
     }
 }
 
-pub trait RplQbit {
-    fn disable_all_string(&self) -> String;
-}
+#[async_trait]
+impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<'a> {
+    async fn download_torrent(
+        &'a mut self,
+        torrent: Torrent,
+        config: QbitTorrent,
+        client: QbitConfig,
+    ) -> Result<(), error::Error> {
+        let hash = self.info_hash();
 
-impl<'a> RplQbit for TorrentPack<'a> {
-    fn disable_all_string(&self) -> String {
-        let mut ret = String::from("");
-        match &self.torrent.files {
-            Some(vecs) => {
-                for (index, _file) in vecs.into_iter().enumerate() {
-                    if index + 1 == vecs.len() {
-                        ret.push_str(&format!("{}", index));
-                    } else {
-                        ret.push_str(&format!("{} | ", index));
-                    }
-                }
-            }
-            None => (),
+        info!(
+            "The pack size is {}, maximum size per chunk is {}. Private torrent = {}.",
+            &self.get_pack_size_human(),
+            &self.get_max_size_chunk_human(),
+            &self.is_private()
+        );
+        info!(
+            "Qbittorrent App Version: {}",
+            client.application_version().await?
+        );
+
+        let chunks = self.chunks()?;
+        let queue = build_queue(chunks, torrent);
+        let no_all_files = queue.no_all_files;
+        let jobs = queue.job;
+
+        let mut offset = 0;
+
+        for job in jobs {
+            job.info();
+            client.add_new_torrent(config.clone()).await?;
+            client
+                .set_priority(&hash, &job.disable_others(offset, no_all_files), 0)
+                .await?;
+            info!("Downloading chunk {}", job.chunk);
+            sleep(Duration::from_secs(5)).await;
+            info!("Finished chunk {}", job.chunk);
+
+            client.delete_torrent(&hash, false).await?;
+
+            offset += job.no_files;
         }
-
-        ret
+        Ok(())
     }
 }
 
-impl<'a> RplDownload<'a, TorrentPack<'a>> for TorrentPack<'a> {
-    fn download_torrent(&'a mut self, torrent: Torrent) -> Result<(), error::Error> {
-        let chunks = self.chunks()?;
-        let queue = build_queue(chunks, torrent);
-        for q in queue {
-            q.info();
+trait RplQbit {
+    fn disable_others(&self, offset: i32, no_all_files: i32) -> String;
+}
+
+impl RplQbit for Job {
+    fn disable_others(&self, offset: i32, no_all_files: i32) -> String {
+        let mut disable_others = String::new();
+        for i in 0..no_all_files {
+            if i < offset || i >= offset + self.no_files {
+                disable_others.push_str(&format!("{} | ", i));
+            }
         }
-        Ok(())
+        disable_others.truncate(disable_others.len() - 3);
+        disable_others
     }
 }
