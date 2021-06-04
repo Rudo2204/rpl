@@ -13,6 +13,109 @@ use tokio::time::{sleep, Duration};
 use crate::librpl::torrent_parser::TorrentPack;
 use crate::librpl::{build_queue, error, Job, RplChunk, RplClient, RplDownload, RplPackConfig};
 
+#[derive(Deserialize, Serialize)]
+enum TorrentFilter {
+    #[serde(rename = "all")]
+    All,
+    #[serde(rename = "downloading")]
+    Downloading,
+    #[serde(rename = "completed")]
+    Completed,
+    #[serde(rename = "paused")]
+    Paused,
+    #[serde(rename = "active")]
+    Active,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+enum State {
+    #[serde(rename = "error")]
+    Error,
+    #[serde(rename = "missingFiles")]
+    MissingFiles,
+    #[serde(rename = "uploading")]
+    Uploading,
+    #[serde(rename = "pausedUP")]
+    PausedUP,
+    #[serde(rename = "queuedUP")]
+    QueuedUP,
+    #[serde(rename = "stalledUP")]
+    StalledUP,
+    #[serde(rename = "checkingUP")]
+    CheckingUP,
+    #[serde(rename = "forcedUP")]
+    ForcedUP,
+    #[serde(rename = "allocating")]
+    Allocating,
+    #[serde(rename = "downloading")]
+    Downloading,
+    #[serde(rename = "metaDL")]
+    MetaDL,
+    #[serde(rename = "pausedDL")]
+    PausedDL,
+    #[serde(rename = "queuedDL")]
+    QueuedDL,
+    #[serde(rename = "stalledDL")]
+    StalledDL,
+    #[serde(rename = "checkingDL")]
+    CheckingDL,
+    #[serde(rename = "forcedDL")]
+    ForceDL,
+    #[serde(rename = "checkingResumeData")]
+    CheckingResumeData,
+    #[serde(rename = "moving")]
+    Moving,
+    #[serde(rename = "unkown")]
+    Unknown,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct QbitTorrentInfo {
+    added_on: i32,
+    amount_left: u64,
+    auto_tmm: bool,
+    category: String,
+    completed: i64,
+    completion_on: i32,
+    dl_limit: i64,
+    dlspeed: i64,
+    downloaded: i64,
+    downloaded_session: i64,
+    eta: i64,
+    // will sometimes error if this is not option
+    f_l_piece_prio: Option<bool>,
+    force_start: bool,
+    hash: String,
+    last_activity: i64,
+    magnet_uri: String,
+    max_ratio: f64,
+    max_seeding_time: i64,
+    name: String,
+    num_complete: i64,
+    num_incomplete: i64,
+    num_leechs: i64,
+    num_seeds: i64,
+    priority: i64,
+    progress: f64,
+    ratio: f64,
+    ratio_limit: f64,
+    save_path: String,
+    seeding_time_limit: i64,
+    seen_complete: i64,
+    seq_dl: bool,
+    size: i64,
+    state: State,
+    super_seeding: bool,
+    tags: String,
+    time_active: i64,
+    total_size: i64,
+    tracker: String,
+    up_limit: i64,
+    uploaded: i64,
+    uploaded_session: i64,
+    upspeed: i64,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Builder, Default)]
 #[builder(setter(into, strip_option))]
 pub struct QbitTorrent {
@@ -188,6 +291,27 @@ impl QbitConfig {
             Err(e) => Err(error::Error::from(e)),
         }
     }
+
+    pub async fn get_torrent_info(&self, hash: &str) -> Result<QbitTorrentInfo, error::Error> {
+        let res = self
+            .client
+            .get(&format!(
+                "{}/api/v2/torrents/info?hashes={}&limit=1",
+                self.address, hash
+            ))
+            .headers(self.make_headers()?)
+            .send()
+            .await?
+            .bytes()
+            .await?;
+
+        let all_torrents: Vec<QbitTorrentInfo> = serde_json::from_slice(&res)?;
+        let ret_torrent = all_torrents.into_iter().nth(0);
+        match ret_torrent {
+            Some(torrent_info) => Ok(torrent_info),
+            None => Err(error::Error::QbitEmptyTorrentInfo),
+        }
+    }
 }
 
 impl QbitTorrent {
@@ -305,9 +429,13 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
         for job in jobs {
             job.info();
             client.add_new_torrent(config.clone()).await?;
-            client
-                .set_priority(&hash, &job.disable_others(offset, no_all_files), 0)
-                .await?;
+            let disable_others = &job.disable_others(offset, no_all_files);
+            match disable_others {
+                Some(disable_string) => {
+                    client.set_priority(&hash, disable_string, 0).await?;
+                }
+                None => (),
+            }
             info!("Downloading chunk {}", job.chunk);
             sleep(Duration::from_secs(5)).await;
             info!("Finished chunk {}", job.chunk);
@@ -321,11 +449,11 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
 }
 
 trait RplQbit {
-    fn disable_others(&self, offset: i32, no_all_files: i32) -> String;
+    fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String>;
 }
 
 impl RplQbit for Job {
-    fn disable_others(&self, offset: i32, no_all_files: i32) -> String {
+    fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String> {
         let mut disable_others = String::new();
         for i in 0..no_all_files {
             if i < offset || i >= offset + self.no_files {
@@ -333,6 +461,9 @@ impl RplQbit for Job {
             }
         }
         disable_others.truncate(disable_others.len() - 3);
-        disable_others
+        match disable_others.is_empty() {
+            false => Some(disable_others),
+            true => None,
+        }
     }
 }

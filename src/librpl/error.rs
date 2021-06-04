@@ -18,4 +18,6 @@ pub enum Error {
     SliceError,
     #[error("The torrent added does not have any files")]
     EmptyTorrent,
+    #[error("qBittorrent returned nothing for the hash provided")]
+    QbitEmptyTorrentInfo,
 }
