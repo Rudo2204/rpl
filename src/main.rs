@@ -3,19 +3,20 @@ use chrono::{Local, Utc};
 //use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Arg};
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
-use log::{debug, info, LevelFilter};
+use log::{debug, LevelFilter};
 use shellexpand::full_with_context;
-use std::{fs::File, io, path::PathBuf};
+use std::io::{stdout, Read};
+use std::{fs::File, path::PathBuf};
 
 mod librpl;
 use librpl::qbittorrent::QbitConfig;
 use librpl::util;
 
-use librpl::qbittorrent::{QbitTorrent, RplQbit};
+use librpl::qbittorrent::QbitTorrent;
 use librpl::torrent_parser::TorrentPack;
-use librpl::RplChunk;
+use librpl::RplDownload;
 
-pub const PROGRAM_NAME: &str = "mendo";
+pub const PROGRAM_NAME: &str = "rpl";
 
 use lava_torrent::torrent::v1::Torrent;
 
@@ -69,14 +70,13 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
     let stdout_config = fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{date} {colored_level} {colored_target} > {colored_message}",
+                "{date} {colored_level} > {colored_message}",
                 date = Local::now().format("%H:%M:%S"),
                 colored_level = format_args!(
                     "\x1B[{}m{}\x1B[0m",
                     colors_line.get_color(&record.level()).to_fg_str(),
                     record.level()
                 ),
-                colored_target = format_args!("\x1B[95m{}\x1B[0m", record.target()),
                 colored_message = format_args!(
                     "\x1B[{}m{}\x1B[0m",
                     colors_line.get_color(&record.level()).to_fg_str(),
@@ -84,7 +84,7 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
                 ),
             ))
         })
-        .chain(io::stdout());
+        .chain(stdout());
 
     if chain {
         base_config
@@ -101,8 +101,8 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let chain = true;
-    let verbosity: u64 = 2; //matches.occurrences_of("verbose");
-    let max_size_allow: i64 = 2 * i64::pow(1024, 3);
+    let verbosity: u64 = 1; //matches.occurrences_of("verbose");
+    let max_size_allow: i64 = (5_f32 * (i64::pow(1024, 3) as f32)) as i64;
     let data_dir = util::get_data_dir("", "", PROGRAM_NAME)?;
     util::create_data_dir(&data_dir)?;
 
@@ -113,36 +113,32 @@ async fn main() -> Result<()> {
     log_file.lock_exclusive()?;
     debug!("-----Logger is initialized. Starting main program!-----");
 
-    let torrent = Torrent::read_from_file(
-        "[ReinForce] Maoujou de Oyasumi (BDRip 1920x1080 x264 FLAC).torrent",
-    )
-    .unwrap();
+    let mut torrent_file =
+        File::open("[ReinForce] Maoujou de Oyasumi (BDRip 1920x1080 x264 FLAC).torrent")?;
+    let mut raw_torrent = Vec::new();
+    torrent_file.read_to_end(&mut raw_torrent)?;
 
-    let mut pack_config = TorrentPack::new(torrent.clone()).max_size(max_size_allow);
-    info!("{}", pack_config.get_pack_size_human());
+    let mut pack_config =
+        TorrentPack::new(Torrent::read_from_bytes(&raw_torrent).unwrap()).max_size(max_size_allow);
 
-    let hash = pack_config.info_hash();
-    let disable_all = pack_config.disable_all_string();
-    info!("is_private: {}", &pack_config.is_private());
-    debug!("{:#?}", pack_config.chunks()?);
     let addr = "http://localhost:7070";
     let qbit = QbitConfig::new("", "", addr).await?;
-    info!(
-        "Qbittorrent App Version: {}",
-        qbit.application_version().await?
-    );
 
-    let t = QbitTorrent::default()
-        .torrents(torrent)
+    let torrent_config = QbitTorrent::default()
+        .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
         .paused(true)
         .save_path(PathBuf::from(
             full_with_context("~/Videos/", util::home_dir, util::get_env)
                 .expect("Could not find the correct path to save data")
                 .into_owned(),
         ));
-
-    qbit.add_new_torrent(t).await?;
-    qbit.set_priority(hash, disable_all, 0).await?;
+    pack_config
+        .download_torrent(
+            Torrent::read_from_bytes(&raw_torrent).unwrap(),
+            torrent_config,
+            qbit,
+        )
+        .await?;
 
     debug!("-----Everything is finished!-----");
     log_file.unlock()?;
