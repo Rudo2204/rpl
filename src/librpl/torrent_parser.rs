@@ -120,9 +120,16 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                                 current_chunk,
                             ),
                         );
+                        debug!(
+                            "Added {} size {} index {} chunk {}",
+                            file.path.to_str().unwrap(),
+                            file.length,
+                            index,
+                            current_chunk,
+                        );
                     } else if current_sum_size + file.length <= self.max_size_allow {
                         debug!(
-                            "Added file {} size {} index {} chunk {}",
+                            "Added {} size {} index {} chunk {}",
                             file.path.to_str().unwrap(),
                             file.length,
                             index,
@@ -156,7 +163,7 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                         current_chunk += 1;
                         current_sum_size = 0;
                         debug!(
-                            "Added file {} size {} index {} chunk {}",
+                            "Added {} size {} index {} chunk {}",
                             file.path.to_str().unwrap(),
                             file.length,
                             index,
