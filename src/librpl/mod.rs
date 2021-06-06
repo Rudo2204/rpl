@@ -1,5 +1,6 @@
 pub mod error;
 pub mod qbittorrent;
+pub mod rclone;
 pub mod torrent_parser;
 pub mod util;
 

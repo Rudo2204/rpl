@@ -12,7 +12,7 @@ log = "0.4"
 fern = { version = "0.6", features = ["colored"] }
 anyhow = "1.0"
 clap = "2.33.3"
-chrono = "0.4"
+chrono = { version = "0.4.19", features = ["serde"] }
 directories = "3.0.2"
 fs2 = "0.4.3"
 humansize = "1.1.1"

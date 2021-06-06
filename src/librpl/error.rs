@@ -22,4 +22,8 @@ pub enum Error {
     QbitEmptyTorrentInfo,
     #[error("qBittorrent client: The torrent has encountered an unexpected error")]
     QbitTorrentErrored,
+    #[error("Unexpected rclone stderr capture error encountered")]
+    RcloneStderrCaptureError,
+    #[error("Command io spawning error: {0}")]
+    CommandSpawningError(#[from] std::io::Error),
 }
