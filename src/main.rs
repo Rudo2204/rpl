@@ -12,8 +12,9 @@ use librpl::qbittorrent::QbitConfig;
 use librpl::util;
 
 use librpl::qbittorrent::QbitTorrent;
+use librpl::rclone::RcloneClient;
 use librpl::torrent_parser::TorrentPack;
-use librpl::RplDownload;
+use librpl::RplLeech;
 
 pub const PROGRAM_NAME: &str = "rpl";
 
@@ -131,11 +132,23 @@ async fn main() -> Result<()> {
                 .expect("Could not find the correct path to save data")
                 .into_owned(),
         ));
+
+    let rclone_client = RcloneClient::new(
+        PathBuf::from(
+            shellexpand::full("~/rust_learnning/rust_product/rpl")
+                .expect("Could not find the correct path to saved data")
+                .into_owned(),
+        ),
+        String::from("rudovultr:/rpl"),
+        4,
+    );
+
     pack_config
-        .download_torrent(
+        .leech_torrent(
             Torrent::read_from_bytes(&raw_torrent).unwrap(),
             torrent_config,
             qbit,
+            rclone_client,
         )
         .await?;
 

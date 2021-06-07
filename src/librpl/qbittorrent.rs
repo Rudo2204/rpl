@@ -14,8 +14,9 @@ use std::convert::TryInto;
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
+use crate::librpl::rclone::RcloneClient;
 use crate::librpl::torrent_parser::TorrentPack;
-use crate::librpl::{build_queue, error, Job, RplChunk, RplClient, RplDownload, RplPackConfig};
+use crate::librpl::{build_queue, error, Job, RplChunk, RplClient, RplLeech, RplPackConfig};
 
 #[derive(Deserialize, Serialize)]
 enum TorrentFilter {
@@ -403,12 +404,13 @@ impl QbitTorrent {
 }
 
 #[async_trait]
-impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<'a> {
-    async fn download_torrent(
+impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<'a> {
+    async fn leech_torrent(
         &'a mut self,
         torrent: Torrent,
         config: QbitTorrent,
-        client: QbitConfig,
+        torrent_client: QbitConfig,
+        upload_client: RcloneClient,
     ) -> Result<(), error::Error> {
         let hash = self.info_hash();
 
@@ -420,7 +422,7 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
         );
         info!(
             "Qbittorrent App Version: {}",
-            client.application_version().await?
+            torrent_client.application_version().await?
         );
 
         let chunks = self.chunks()?;
@@ -432,20 +434,24 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
 
         for job in jobs {
             job.info();
-            client.add_new_torrent(config.clone()).await?;
+            torrent_client.add_new_torrent(config.clone()).await?;
             let disable_others = &job.disable_others(offset, no_all_files);
             match disable_others {
                 Some(disable_string) => {
-                    client.set_priority(&hash, disable_string, 0).await?;
+                    torrent_client
+                        .set_priority(&hash, disable_string, 0)
+                        .await?;
                 }
                 None => (),
             }
             info!("Downloading chunk {}", job.chunk);
-            //sleep(Duration::from_secs(5)).await;
-            job.download(&client, &hash).await?;
-            info!("Finished chunk {}", job.chunk);
+            job.download(&torrent_client, &hash).await?;
+            info!("Finished downloading chunk {}", job.chunk);
+            info!("Uploading chunk {}", job.chunk);
+            job.upload(&upload_client)?;
+            info!("Finished uploading chunk {}", job.chunk);
 
-            client.delete_torrent(&hash, false).await?;
+            torrent_client.delete_torrent(&hash, false).await?;
 
             offset += job.no_files;
         }
@@ -457,6 +463,7 @@ impl<'a> RplDownload<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPa
 trait RplQbit {
     fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String>;
     async fn download(&self, client: &QbitConfig, hash: &str) -> Result<(), error::Error>;
+    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error>;
 }
 
 #[async_trait]
@@ -519,5 +526,11 @@ impl RplQbit for Job {
             sleep(Duration::from_millis(20)).await;
         }
         return Ok(());
+    }
+
+    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error> {
+        client.upload()?;
+
+        Ok(())
     }
 }
