@@ -4,7 +4,6 @@ use chrono::{Local, Utc};
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
 use log::{debug, LevelFilter};
-use shellexpand::full_with_context;
 use std::io::{stdout, Read};
 use std::{fs::File, path::PathBuf};
 
@@ -128,7 +127,7 @@ async fn main() -> Result<()> {
         .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
         .paused(true)
         .save_path(PathBuf::from(
-            full_with_context("~/Videos/", util::home_dir, util::get_env)
+            shellexpand::full("~/Videos/")
                 .expect("Could not find the correct path to save data")
                 .into_owned(),
         ));

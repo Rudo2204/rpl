@@ -20,17 +20,3 @@ pub fn create_data_dir(data_dir: &Path) -> anyhow::Result<()> {
     }
     Ok(())
 }
-
-pub fn home_dir() -> Option<PathBuf> {
-    Some(Path::new("/home/user").into())
-}
-
-pub fn get_env(name: &str) -> Result<Option<&'static str>, &'static str> {
-    match name {
-        "A" => Ok(Some("a value")),
-        "B" => Ok(Some("b value")),
-        "T" => Ok(Some("~")),
-        "E" => Err("some error"),
-        _ => Ok(None),
-    }
-}
