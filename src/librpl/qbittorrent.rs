@@ -448,10 +448,10 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
             job.download(&torrent_client, &hash).await?;
             info!("Finished downloading chunk {}", job.chunk);
             info!("Uploading chunk {}", job.chunk);
-            job.upload(&upload_client)?;
+            job.upload(&upload_client, job.total_size)?;
             info!("Finished uploading chunk {}", job.chunk);
 
-            torrent_client.delete_torrent(&hash, false).await?;
+            torrent_client.delete_torrent(&hash, true).await?;
 
             offset += job.no_files;
         }
@@ -463,7 +463,7 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
 trait RplQbit {
     fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String>;
     async fn download(&self, client: &QbitConfig, hash: &str) -> Result<(), error::Error>;
-    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error>;
+    fn upload(&self, client: &RcloneClient, size: i64) -> Result<(), error::Error>;
 }
 
 #[async_trait]
@@ -487,12 +487,12 @@ impl RplQbit for Job {
         let torrent_info = client.get_torrent_info(hash).await?;
         let size = self.total_size as u64;
         let _asd_dl_speed = torrent_info.dlspeed;
-        let dl_speed: u64 = (20_f32 * u32::pow(1024, 2) as f32) as u64;
+        let dl_speed: u64 = (50_f32 * u32::pow(1024, 2) as f32) as u64;
         let mut downloaded: u64 = 0;
 
         let pb = ProgressBar::new(size.try_into().expect("Torrent size is negative?"));
         pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
             .progress_chars("#>-"));
 
         pb.set_message(format!("Downloading chunk {}", self.chunk));
@@ -528,8 +528,8 @@ impl RplQbit for Job {
         return Ok(());
     }
 
-    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error> {
-        client.upload()?;
+    fn upload(&self, client: &RcloneClient, size: i64) -> Result<(), error::Error> {
+        client.upload(size)?;
 
         Ok(())
     }
