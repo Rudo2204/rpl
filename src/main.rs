@@ -135,11 +135,11 @@ async fn main() -> Result<()> {
 
     let rclone_client = RcloneClient::new(
         PathBuf::from(
-            shellexpand::full("~/rust_learnning/rust_product/rpl")
+            shellexpand::full("~/rclone uploadme")
                 .expect("Could not find the correct path to saved data")
                 .into_owned(),
         ),
-        String::from("rudovultr:/rpl"),
+        String::from("gdrive:/rpl_test"),
         4,
     );
 
