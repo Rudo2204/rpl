@@ -13,6 +13,7 @@ use std::path::PathBuf;
 
 pub use crate::librpl::error as _;
 pub use crate::librpl::qbittorrent::QbitConfig;
+pub use crate::librpl::rclone::RcloneClient;
 
 pub trait RplClient {}
 pub trait RplPackConfig {}
@@ -71,17 +72,18 @@ impl Job {
 }
 
 #[async_trait]
-pub trait RplDownload<'a, T, P, C>
+pub trait RplLeech<'a, T, P, C>
 where
     T: RplChunk<'a>,
     P: RplPackConfig,
     C: RplClient,
 {
-    async fn download_torrent(
+    async fn leech_torrent(
         &'a mut self,
         data: Torrent,
         config: P,
-        client: C,
+        torrent_client: C,
+        upload_client: RcloneClient,
     ) -> Result<(), error::Error>;
 }
 
