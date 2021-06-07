@@ -1,6 +1,6 @@
 use humansize::{file_size_opts, FileSize};
 use lava_torrent::torrent::v1::Torrent;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -12,14 +12,16 @@ pub struct TorrentPack<'a> {
     max_size_allow: i64,
     pub torrent: Torrent,
     downloaded_file: Option<HashMap<&'a PathBuf, RplFile<'a>>>,
+    ignore_warning: bool,
 }
 
 impl<'a> TorrentPack<'a> {
-    pub fn new(torrent: Torrent) -> Self {
+    pub fn new(torrent: Torrent, ignore_warning: bool) -> Self {
         Self {
             max_size_allow: 0,
             torrent,
             downloaded_file: None,
+            ignore_warning,
         }
     }
 
@@ -86,7 +88,8 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                             RplFile::new(file.path.to_str().unwrap(), file.length, false, -1),
                         );
 
-                        warn!(
+                        if self.ignore_warning {
+                            warn!(
                             "File `{}` has size {} which is larger than maximum size allowed {}. This file will be skipped.",
                             file.path
                                 .to_str()
@@ -96,6 +99,19 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                                 .file_size(file_size_opts::BINARY)
                                 .unwrap()
                         );
+                        } else {
+                            error!(
+                            "File `{}` has size {} which is larger than maximum size allowed {}. If you want to ignore this file, rerun the program with -f/--force",
+                            file.path
+                                .to_str()
+                                .expect("Could not convert file path to str"),
+                            file.length.file_size(file_size_opts::BINARY).unwrap(),
+                            self.max_size_allow
+                                .file_size(file_size_opts::BINARY)
+                                .unwrap()
+                        );
+                            return Err(error::Error::MaxSizeAllowedTooSmall);
+                        }
                     // last file case
                     } else if index + 1 == files_in_pack {
                         downloaded.insert(
@@ -196,6 +212,7 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                 }
             }
         }
+
         Ok(chunks)
     }
 }

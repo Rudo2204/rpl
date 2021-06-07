@@ -102,7 +102,7 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
 async fn main() -> Result<()> {
     let chain = true;
     let verbosity: u64 = 1; //matches.occurrences_of("verbose");
-    let max_size_allow: i64 = (5_f32 * (u32::pow(1024, 3) as f32)) as i64;
+    let max_size_allow: i64 = (1.3_f32 * (u32::pow(1024, 3) as f32)) as i64;
     let data_dir = util::get_data_dir("", "", PROGRAM_NAME)?;
     util::create_data_dir(&data_dir)?;
 
@@ -118,8 +118,8 @@ async fn main() -> Result<()> {
     let mut raw_torrent = Vec::new();
     torrent_file.read_to_end(&mut raw_torrent)?;
 
-    let mut pack_config =
-        TorrentPack::new(Torrent::read_from_bytes(&raw_torrent).unwrap()).max_size(max_size_allow);
+    let mut pack_config = TorrentPack::new(Torrent::read_from_bytes(&raw_torrent).unwrap(), false)
+        .max_size(max_size_allow);
 
     let addr = "http://localhost:7070";
     let qbit = QbitConfig::new("", "", addr).await?;

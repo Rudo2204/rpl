@@ -26,4 +26,6 @@ pub enum Error {
     RcloneStderrCaptureError,
     #[error("Command io spawning error: {0}")]
     CommandSpawningError(#[from] std::io::Error),
+    #[error("File size in pack is larger than maximum allowed size")]
+    MaxSizeAllowedTooSmall,
 }
