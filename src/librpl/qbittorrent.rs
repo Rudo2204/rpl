@@ -434,6 +434,7 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
         let queue = build_queue(chunks, torrent);
         let no_all_files = queue.no_all_files;
         let jobs = queue.job;
+        let no_jobs = jobs.len();
 
         let mut offset = 0;
 
@@ -449,12 +450,12 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
                 }
                 None => (),
             }
-            info!("Downloading chunk {}", job.chunk);
+            info!("Downloading chunk {}/{}", job.chunk, no_jobs);
             job.download(&torrent_client, &hash).await?;
-            info!("Finished downloading chunk {}", job.chunk);
-            info!("Uploading chunk {}", job.chunk);
+            info!("Finished downloading chunk {}/{}", job.chunk, no_jobs);
+            info!("Uploading chunk {}/{}", job.chunk, no_jobs);
             job.upload(&upload_client)?;
-            info!("Finished uploading chunk {}", job.chunk);
+            info!("Finished uploading chunk {}/{}", job.chunk, no_jobs);
 
             torrent_client.delete_torrent(&hash, true).await?;
 

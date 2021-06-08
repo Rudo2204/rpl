@@ -1,10 +1,11 @@
 use anyhow::Result;
 use chrono::{Local, Utc};
-//use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Arg};
+use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Arg, ArgMatches};
 use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
 use log::{debug, LevelFilter};
+use parse_size::parse_size;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{stdout, Read, Write};
@@ -113,10 +114,39 @@ struct RplConfig {
     max_size_percentage: u8,
     max_size: String,
     torrent_client: String,
-    rclone_client: String,
+    upload_client: String,
     save_path: String,
     remote_path: String,
     ignore_warning: bool,
+}
+
+struct RplRunningConfig {
+    max_size: u64,
+    //torrent_client: String,
+    upload_client: String,
+    save_path: String,
+    remote_path: String,
+    ignore_warning: bool,
+}
+
+impl RplRunningConfig {
+    fn new(
+        max_size: u64,
+        //torrent_client: String,
+        upload_client: String,
+        save_path: String,
+        remote_path: String,
+        ignore_warning: bool,
+    ) -> Self {
+        Self {
+            max_size,
+            //torrent_client,
+            upload_client,
+            save_path,
+            remote_path,
+            ignore_warning,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Getters)]
@@ -143,7 +173,7 @@ max_size = "5 GiB"
 # only qbittorrent is available atm
 torrent_client = "qbittorrent"
 # rclone or any rclone's variant (fclone, gclone) used for uploading
-rclone_client = "rclone"
+uclone_client = "rclone"
 # temporary data from pack will be saved to here
 # this directory should be dedicated for rpl
 save_path = ""
@@ -242,11 +272,179 @@ fn get_rpl_config() -> Result<Config, error::Error> {
     Ok(config)
 }
 
+fn get_running_config(
+    file_config: &Config,
+    matches: ArgMatches,
+) -> Result<RplRunningConfig, error::Error> {
+    let torrent_client = if let Some(client) = matches.value_of("torrent_client") {
+        client
+    } else {
+        &file_config.rpl.torrent_client
+    };
+
+    if torrent_client != "qbittorrent" {
+        return Err(error::Error::UnsupportedTorrentClient);
+    }
+
+    let max_size_possible: u64 = fs2::available_space(&file_config.rpl.save_path).unwrap();
+    let max_size_allow: u64 = if let Some(percentage) = matches.value_of("max_size_percentage") {
+        let p: u64 = percentage.parse::<u64>().unwrap();
+        if p > 0 && p <= 100 {
+            max_size_possible * p / 100
+        } else {
+            return Err(error::Error::InvalidMaxSizePercentage);
+        }
+    } else if let Some(size) = matches.value_of("max_size") {
+        parse_size(size).expect("Could not parse max_size from input")
+    } else {
+        if file_config.max_size_percentage_used().unwrap() {
+            max_size_possible * (file_config.rpl.max_size_percentage as u64) / 100
+        } else {
+            parse_size(&file_config.rpl.max_size).expect("Could not parse max_size in file config")
+        }
+    };
+
+    let upload_client = if let Some(client) = matches.value_of("upload_client") {
+        client
+    } else {
+        &file_config.rpl.upload_client
+    };
+
+    let save_path = if let Some(path) = matches.value_of("save_path") {
+        path
+    } else {
+        &file_config.rpl.save_path
+    };
+
+    let remote_path = if let Some(path) = matches.value_of("save_path") {
+        path
+    } else {
+        &file_config.rpl.remote_path
+    };
+
+    let ignore_warning: bool = if matches.is_present("ignore_warning") {
+        true
+    } else {
+        file_config.rpl.ignore_warning
+    };
+
+    let running_config = RplRunningConfig::new(
+        max_size_allow,
+        //String::from(torrent_client),
+        String::from(upload_client),
+        String::from(save_path),
+        String::from(remote_path),
+        ignore_warning,
+    );
+
+    Ok(running_config)
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let chain = true;
-    let verbosity: u64 = 1; //matches.occurrences_of("verbose");
-    let max_size_allow: i64 = (1.3_f32 * (u32::pow(1024, 3) as f32)) as i64;
+    let matches = App::new(PROGRAM_NAME)
+        .setting(AppSettings::DisableHelpSubcommand)
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
+        .arg(
+            Arg::with_name("enable_logging")
+                .short("l")
+                .long("log")
+                .help("Log output to logging file (for debugging)"),
+        )
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .multiple(true)
+                .help("Sets the level of debug information verbosity"),
+        )
+        .arg(
+            Arg::with_name("max_size_percentage")
+                .long("percentage")
+                .takes_value(true)
+                .conflicts_with("max_size")
+                .help("Set percentage of free available disk space allowed for rpl"),
+        )
+        .arg(
+            Arg::with_name("max_size")
+                .short("s")
+                .long("size")
+                .takes_value(true)
+                .help("Set disk space allowed for rpl"),
+        )
+        .arg(
+            Arg::with_name("torrent_client")
+                .long("tclient")
+                .takes_value(true)
+                .help("Set the torrent client"),
+        )
+        .arg(
+            Arg::with_name("upload_client")
+                .long("uclient")
+                .takes_value(true)
+                .help("Set the upload client"),
+        )
+        .arg(
+            Arg::with_name("save_path")
+                .short("p")
+                .long("spath")
+                .takes_value(true)
+                .help("Set the save path"),
+        )
+        .arg(
+            Arg::with_name("remote_path")
+                .short("r")
+                .long("rpath")
+                .takes_value(true)
+                .help("Set the remote path"),
+        )
+        .arg(
+            Arg::with_name("ignore_warning")
+                .short("f")
+                .long("force")
+                .takes_value(true)
+                .help("Force rpl to ignore warning"),
+        )
+        .subcommand(
+            App::new("qbittorrent")
+                .about("Configure the username, password, address of qBittorrent WEB UI")
+                .arg(
+                    Arg::with_name("username")
+                        .long("username")
+                        .takes_value(true)
+                        .help("Set the username of qBittorrent Web UI"),
+                )
+                .arg(
+                    Arg::with_name("password")
+                        .long("password")
+                        .takes_value(true)
+                        .help("Set the password of qBittorrent Web UI"),
+                )
+                .arg(
+                    Arg::with_name("address")
+                        .long("address")
+                        .takes_value(true)
+                        .help("Set the address of qBittorrent Web UI"),
+                ),
+        )
+        .subcommand(
+            App::new("rclone")
+                .about("Configure the parameters of rclone or its variants")
+                .arg(
+                    Arg::with_name("transfers")
+                        .short("t")
+                        .long("transfers")
+                        .takes_value(true)
+                        .help("Configure the number of transfers"),
+                ),
+        )
+        .get_matches();
+
+    let chain = matches.is_present("enable_logging");
+    let verbosity: u64 = matches.occurrences_of("verbose");
+
     let data_dir = util::get_data_dir("", "", PROGRAM_NAME)?;
     util::create_data_dir(&data_dir)?;
 
@@ -256,37 +454,45 @@ async fn main() -> Result<()> {
     let log_file = File::open(log_file_path)?;
     log_file.lock_exclusive()?;
     debug!("-----Logger is initialized. Starting main program!-----");
+    let file_config = get_rpl_config()?;
 
-    let _config = get_rpl_config()?;
+    let config = get_running_config(&file_config, matches)?;
 
     let mut torrent_file =
         File::open("[ReinForce] Maoujou de Oyasumi (BDRip 1920x1080 x264 FLAC).torrent")?;
     let mut raw_torrent = Vec::new();
     torrent_file.read_to_end(&mut raw_torrent)?;
 
-    let mut pack_config = TorrentPack::new(Torrent::read_from_bytes(&raw_torrent).unwrap(), false)
-        .max_size(max_size_allow);
+    let mut pack_config = TorrentPack::new(
+        Torrent::read_from_bytes(&raw_torrent).unwrap(),
+        config.ignore_warning,
+    )
+    .max_size(config.max_size as i64);
 
-    let addr = "http://localhost:7070";
-    let qbit = QbitConfig::new("", "", addr).await?;
+    let qbit = QbitConfig::new(
+        &file_config.qbittorrent.username,
+        &file_config.qbittorrent.password,
+        &file_config.qbittorrent.address,
+    )
+    .await?;
 
     let torrent_config = QbitTorrent::default()
         .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
         .paused(true)
         .save_path(PathBuf::from(
-            shellexpand::full("~/Videos/")
+            shellexpand::full(&config.save_path)
                 .expect("Could not find the correct path to save data")
                 .into_owned(),
         ));
 
-    let rclone_client = RcloneClient::new(
-        String::from("rclone"),
+    let upload_client = RcloneClient::new(
+        config.upload_client,
         PathBuf::from(
-            shellexpand::full("~/rclone uploadme")
+            shellexpand::full(&config.save_path)
                 .expect("Could not find the correct path to saved data")
                 .into_owned(),
         ),
-        String::from("gdrive:/rpl_test"),
+        config.remote_path,
         4,
     );
 
@@ -295,7 +501,7 @@ async fn main() -> Result<()> {
             Torrent::read_from_bytes(&raw_torrent).unwrap(),
             torrent_config,
             qbit,
-            rclone_client,
+            upload_client,
         )
         .await?;
 
