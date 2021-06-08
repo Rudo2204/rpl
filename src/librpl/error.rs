@@ -28,4 +28,8 @@ pub enum Error {
     CommandSpawningError(#[from] std::io::Error),
     #[error("File size in pack is larger than maximum allowed size")]
     MaxSizeAllowedTooSmall,
+    #[error("Invalid max_size_percentage, allowed value are 0-100")]
+    InvalidMaxSizePercentage,
+    #[error("Invalid rpl config, please recheck the config file")]
+    InvalidRplConfig,
 }

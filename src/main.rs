@@ -1,17 +1,20 @@
 use anyhow::Result;
 use chrono::{Local, Utc};
 //use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Arg};
+use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
 use log::{debug, LevelFilter};
-use std::io::{stdout, Read};
-use std::{fs::File, path::PathBuf};
+use serde::{Deserialize, Serialize};
+use std::fs::{self, File, OpenOptions};
+use std::io::{stdout, Read, Write};
+use std::path::{Path, PathBuf};
 
 mod librpl;
-use librpl::qbittorrent::QbitConfig;
 use librpl::util;
 
-use librpl::qbittorrent::QbitTorrent;
+use librpl::error;
+use librpl::qbittorrent::{QbitConfig, QbitTorrent};
 use librpl::rclone::RcloneClient;
 use librpl::torrent_parser::TorrentPack;
 use librpl::RplLeech;
@@ -98,6 +101,147 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize, Getters)]
+struct Config {
+    rpl: RplConfig,
+    qbittorrent: RplQbitConfig,
+    rclone: RplRcloneConfig,
+}
+
+#[derive(Serialize, Deserialize, Getters)]
+struct RplConfig {
+    max_size_percentage: u8,
+    max_size: String,
+    torrent_client: String,
+    rclone_client: String,
+    save_path: String,
+    remote_path: String,
+    ignore_warning: bool,
+}
+
+#[derive(Serialize, Deserialize, Getters)]
+struct RplQbitConfig {
+    username: String,
+    password: String,
+    address: String,
+}
+
+#[derive(Serialize, Deserialize, Getters)]
+struct RplRcloneConfig {
+    transfers: u16,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let stock_config = r#"[rpl]
+# rpl will use this percentage of available disk space as max_size
+# value range: 1-100, or 0 to use max_size value instead
+max_size_percentage = 0
+# max_size value allowed, if max_size_percentage is a positive number
+# then this field will have no effect
+max_size = "5 GiB"
+# only qbittorrent is available atm
+torrent_client = "qbittorrent"
+# rclone or any rclone's variant (fclone, gclone) used for uploading
+rclone_client = "rclone"
+# temporary data from pack will be saved to here
+# this directory should be dedicated for rpl
+save_path = ""
+# rclone remote path for uploading. Example: "nugu:/rpl"
+remote_path = ""
+# Skip files that have size larger than max_size
+ignore_warning = false
+
+[qbittorrent]
+# default username of qbittorrent WEB UI
+username = "admin"
+# default password of qbittorrent WEB UI
+password = "adminadmin"
+# default address of qbittorrent WEB UI
+address = "http://localhost:8080"
+
+[rclone]
+# default transfers of rclone
+transfers = 4"#;
+
+        let config = Config::from_config(stock_config);
+        config
+    }
+}
+
+impl Config {
+    fn from_config(config_string: &str) -> Self {
+        let config: Config = toml::from_str(config_string).expect("Could not parse config file");
+        config
+    }
+
+    fn write_config(&self) {
+        let config_dir = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
+        let mut file = OpenOptions::new().write(true).open(config_dir).unwrap();
+        writeln!(file, "{}", toml::to_string(&self).unwrap())
+            .expect("Could not write config to file, maybe there is a permission error?");
+    }
+
+    fn save_path_invalid(&self) -> bool {
+        let save_path = &self.rpl.save_path;
+        if save_path.is_empty() {
+            return true;
+        } else {
+            let path = Path::new(save_path);
+            if !path.exists() {
+                debug!("{} does not exist. I will create it now", path.display());
+                fs::create_dir_all(path).unwrap();
+            }
+            return false;
+        }
+    }
+
+    fn remote_path_invalid(&self) -> bool {
+        self.rpl.remote_path.is_empty()
+    }
+
+    fn max_size_percentage_used(&self) -> Result<bool, error::Error> {
+        // Can't use match here because https://github.com/rust-lang/rust/issues/37854
+        let tmp = self.rpl.max_size_percentage;
+        return if tmp == 0 {
+            Ok(false)
+        } else if tmp > 0 && tmp <= 100 {
+            Ok(true)
+        } else {
+            Err(error::Error::InvalidMaxSizePercentage)
+        };
+    }
+
+    fn max_size_allow_invalid(&self) -> Result<bool, error::Error> {
+        let _size = parse_size::parse_size(&self.rpl.max_size()).unwrap();
+        Ok(false)
+    }
+}
+
+fn get_rpl_config() -> Result<Config, error::Error> {
+    let conf_file = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
+
+    let config: Config;
+    if !conf_file.exists() {
+        util::create_proj_conf("", "", PROGRAM_NAME).unwrap();
+        config = Config::default();
+        config.write_config();
+    } else {
+        let s = fs::read_to_string(&conf_file).unwrap();
+        config = Config::from_config(&s);
+    }
+
+    if config.save_path_invalid()
+        || config.remote_path_invalid()
+        || config.max_size_percentage_used().is_err()
+        || config.max_size_allow_invalid().is_err()
+    {
+        return Err(error::Error::InvalidRplConfig);
+    }
+
+    Ok(config)
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let chain = true;
@@ -112,6 +256,8 @@ async fn main() -> Result<()> {
     let log_file = File::open(log_file_path)?;
     log_file.lock_exclusive()?;
     debug!("-----Logger is initialized. Starting main program!-----");
+
+    let _config = get_rpl_config()?;
 
     let mut torrent_file =
         File::open("[ReinForce] Maoujou de Oyasumi (BDRip 1920x1080 x264 FLAC).torrent")?;
