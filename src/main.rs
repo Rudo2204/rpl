@@ -183,11 +183,11 @@ remote_path = ""
 ignore_warning = false
 
 [qbittorrent]
-# default username of qbittorrent WEB UI
+# default username of qbittorrent Web UI
 username = "admin"
-# default password of qbittorrent WEB UI
+# default password of qbittorrent Web UI
 password = "adminadmin"
-# default address of qbittorrent WEB UI
+# default address of qbittorrent Web UI
 address = "http://localhost:8080"
 
 [rclone]
@@ -408,7 +408,7 @@ async fn main() -> Result<()> {
         )
         .subcommand(
             App::new("qbittorrent")
-                .about("Configure the username, password, address of qBittorrent WEB UI")
+                .about("Configure the username, password, address of qBittorrent Web UI")
                 .arg(
                     Arg::with_name("username")
                         .long("username")
