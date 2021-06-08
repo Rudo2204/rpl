@@ -27,6 +27,8 @@ shellexpand = "2.1.0"
 async-trait = "0.1.50"
 indicatif = "0.16.2"
 derive-getters = "0.2.0"
+toml = "0.5.8"
+parse-size = "1.0.0"
 
 [profile.dev]
 panic = "unwind"
