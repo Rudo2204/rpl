@@ -11,6 +11,7 @@ use crate::librpl::RplFile;
 pub struct TorrentPack<'a> {
     max_size_allow: i64,
     pub torrent: Torrent,
+    // TODO: Implement saving downloaded files to database?
     downloaded_file: Option<HashMap<&'a PathBuf, RplFile<'a>>>,
     ignore_warning: bool,
 }
