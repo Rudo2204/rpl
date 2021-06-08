@@ -129,3 +129,7 @@ pub fn build_queue<'a>(datamap: HashMap<&PathBuf, RplFile<'a>>, torrent: Torrent
     job.push(Job::new(current_chunk, total_size, files));
     Queue::new(no_all_files, job)
 }
+
+pub trait RplUpload {
+    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error>;
+}

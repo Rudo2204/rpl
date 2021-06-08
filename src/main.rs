@@ -280,6 +280,7 @@ async fn main() -> Result<()> {
         ));
 
     let rclone_client = RcloneClient::new(
+        String::from("rclone"),
         PathBuf::from(
             shellexpand::full("~/rclone uploadme")
                 .expect("Could not find the correct path to saved data")

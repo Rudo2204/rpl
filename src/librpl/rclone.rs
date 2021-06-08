@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::{ChildStderr, Command, Stdio};
 
 use crate::librpl::error;
+use crate::librpl::{Job, RplUpload};
 
 // rclone copy --stats 1s --use-json-log --verbose <src> <dst> 3>&1 2>&3- | tee -a log
 #[derive(Debug, Deserialize)]
@@ -62,14 +63,52 @@ struct RcloneTransferring {
 
 #[derive(Debug)]
 pub struct RcloneClient {
+    variant: String,
     source: PathBuf,
     destination: String,
     transfers: u16,
 }
 
+impl RplUpload for Job {
+    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error> {
+        let stderr = client.build_stderr_capture()?;
+        let reader = BufReader::new(stderr);
+
+        let pb = ProgressBar::new(
+            self.total_size
+                .try_into()
+                .expect("Torrent size is negative?"),
+        );
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
+            .progress_chars("#>-"));
+
+        pb.set_message(format!("Waiting for {}", client.variant));
+
+        reader
+            .lines()
+            .filter_map(|line| line.ok())
+            .filter(|line| line.find("ETA").is_some())
+            .for_each(|line| {
+                let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
+                match resp.stats.eta {
+                    Some(_eta) => {
+                        pb.set_message(format!("Uploading chunk {}", self.chunk));
+                        pb.set_position(resp.stats.bytes);
+                    }
+                    // Still waiting for rclone
+                    None => (),
+                }
+            });
+
+        Ok(())
+    }
+}
+
 impl RcloneClient {
-    pub fn new(source: PathBuf, destination: String, transfers: u16) -> Self {
+    pub fn new(variant: String, source: PathBuf, destination: String, transfers: u16) -> Self {
         Self {
+            variant,
             source,
             destination,
             transfers,
@@ -78,7 +117,7 @@ impl RcloneClient {
 
     // TODO: implement a trait instead of hardcoding for qbittorrent like this
     fn build_stderr_capture(&self) -> Result<ChildStderr, error::Error> {
-        let stderr = Command::new("rclone")
+        let stderr = Command::new(self.variant.to_owned())
             .arg("copy")
             .arg("--exclude")
             .arg("*.parts")
@@ -101,36 +140,6 @@ impl RcloneClient {
             None => Err(error::Error::RcloneStderrCaptureError),
         }
     }
-
-    pub fn upload(&self, size: i64) -> Result<(), error::Error> {
-        let stderr = self.build_stderr_capture()?;
-        let reader = BufReader::new(stderr);
-
-        let pb = ProgressBar::new(size.try_into().expect("Torrent size is negative?"));
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
-            .progress_chars("#>-"));
-
-        pb.set_message("Waiting for rclone");
-
-        reader
-            .lines()
-            .filter_map(|line| line.ok())
-            .filter(|line| line.find("ETA").is_some())
-            .for_each(|line| {
-                let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
-                match resp.stats.eta {
-                    Some(_eta) => {
-                        pb.set_message("Uploading chunk 1");
-                        pb.set_position(resp.stats.bytes);
-                    }
-                    // Still waiting for rclone
-                    None => (),
-                }
-            });
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -143,6 +152,7 @@ mod tests {
     #[ignore]
     fn upload() {
         let rclone_client = RcloneClient::new(
+            String::from("rclone"),
             PathBuf::from(
                 shellexpand::full("~/rclone uploadme")
                     .expect("Could not find the correct path to saved data")
@@ -152,7 +162,7 @@ mod tests {
             4,
         );
 
-        rclone_client.upload(74280).unwrap();
+        rclone_client.upload(76043928).unwrap();
     }
 
     #[test]
