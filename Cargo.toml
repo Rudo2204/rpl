@@ -3,6 +3,7 @@ name = "rpl"
 version = "0.1.0"
 authors = ["Rudo2204 <rudo2204@gmail.com>"]
 edition = "2018"
+description = "Rudo's pack leecher: leech large packs with small machines"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
