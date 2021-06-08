@@ -404,7 +404,6 @@ async fn main() -> Result<()> {
             Arg::with_name("ignore_warning")
                 .short("f")
                 .long("force")
-                .takes_value(true)
                 .help("Force rpl to ignore warning"),
         )
         .subcommand(
