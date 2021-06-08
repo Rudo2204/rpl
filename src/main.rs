@@ -274,7 +274,7 @@ fn get_rpl_config() -> Result<Config, error::Error> {
 
 fn get_running_config(
     file_config: &Config,
-    matches: ArgMatches,
+    matches: &ArgMatches,
 ) -> Result<RplRunningConfig, error::Error> {
     let torrent_client = if let Some(client) = matches.value_of("torrent_client") {
         client
@@ -347,6 +347,13 @@ async fn main() -> Result<()> {
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
+        .arg(
+            Arg::with_name("file")
+                .help("The input torrent file")
+                .index(1)
+                .takes_value(true)
+                .required(true),
+        )
         .arg(
             Arg::with_name("enable_logging")
                 .short("l")
@@ -453,12 +460,12 @@ async fn main() -> Result<()> {
     let log_file = File::open(log_file_path)?;
     log_file.lock_exclusive()?;
     debug!("-----Logger is initialized. Starting main program!-----");
+    // TODO: subcommand handling here
     let file_config = get_rpl_config()?;
 
-    let config = get_running_config(&file_config, matches)?;
+    let config = get_running_config(&file_config, &matches)?;
 
-    let mut torrent_file =
-        File::open("[ReinForce] Maoujou de Oyasumi (BDRip 1920x1080 x264 FLAC).torrent")?;
+    let mut torrent_file = File::open(&matches.value_of("file").unwrap())?;
     let mut raw_torrent = Vec::new();
     torrent_file.read_to_end(&mut raw_torrent)?;
 
@@ -486,11 +493,7 @@ async fn main() -> Result<()> {
 
     let upload_client = RcloneClient::new(
         config.upload_client,
-        PathBuf::from(
-            shellexpand::full(&config.save_path)
-                .expect("Could not find the correct path to saved data")
-                .into_owned(),
-        ),
+        PathBuf::from(shellexpand::full(&config.save_path).unwrap().into_owned()),
         config.remote_path,
         4,
     );
