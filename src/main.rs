@@ -4,6 +4,7 @@ use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Ar
 use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
+use lava_torrent::torrent::v1::Torrent;
 use log::{debug, error, LevelFilter};
 use parse_size::parse_size;
 use serde::{Deserialize, Serialize};
@@ -21,10 +22,42 @@ use librpl::torrent_parser::TorrentPack;
 use librpl::RplLeech;
 
 pub const PROGRAM_NAME: &str = "rpl";
+const STOCK_CONFIG: &str = r#"[rpl]
+# rpl will use this percentage of available disk space as max_size
+# value range: 1-100, or 0 to use max_size value instead
+max_size_percentage = 0
+# max_size value allowed, if max_size_percentage is a positive number
+# then this field will have no effect
+max_size = "5 GiB"
+# only qbittorrent is available atm
+torrent_client = "qbittorrent"
+# rclone or any rclone's variant (fclone, gclone) used for uploading
+upload_client = "rclone"
+# temporary data from pack will be saved to here
+# this directory should be dedicated for rpl
+save_path = ""
+# rclone remote path for uploading. Example: "nugu:/rpl"
+remote_path = ""
+# Skip files that have size larger than max_size
+ignore_warning = false
+# set to true to seed the torrent through rclone's mount after rpl finishes
+seed = false
+# set the rclone's mount path
+seed_path = ""
 
-use lava_torrent::torrent::v1::Torrent;
+[qbittorrent]
+# default username of qbittorrent Web UI
+username = "admin"
+# default password of qbittorrent Web UI
+password = "adminadmin"
+# default address of qbittorrent Web UI
+address = "http://localhost:8080"
 
-fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
+[rclone]
+# default transfers of rclone
+transfers = 4"#;
+
+fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<Option<&str>> {
     let colors_line = ColoredLevelConfig::new()
         .error(Color::Red)
         .warn(Color::Yellow)
@@ -47,29 +80,6 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
         _3_or_more => base_config.level(LevelFilter::Trace),
     };
 
-    // Separate file config so we can include year, month and day (UTC) in file logs
-    let log_file_path =
-        util::get_data_dir("", "", PROGRAM_NAME)?.join(format!("{}.log", PROGRAM_NAME));
-    let file_config = fern::Dispatch::new()
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "{date} {colored_level} {colored_target} > {colored_message}",
-                date = Utc::now().format("%Y-%m-%dT%H:%M:%SUTC"),
-                colored_level = format_args!(
-                    "\x1B[{}m{}\x1B[0m",
-                    colors_line.get_color(&record.level()).to_fg_str(),
-                    record.level()
-                ),
-                colored_target = format_args!("\x1B[95m{}\x1B[0m", record.target()),
-                colored_message = format_args!(
-                    "\x1B[{}m{}\x1B[0m",
-                    colors_line.get_color(&record.level()).to_fg_str(),
-                    message
-                ),
-            ))
-        })
-        .chain(fern::log_file(log_file_path)?);
-
     // For stdout output we will just output local %H:%M:%S
     let stdout_config = fern::Dispatch::new()
         .format(move |out, message, record| {
@@ -91,6 +101,32 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
         .chain(stdout());
 
     if chain {
+        // Separate file config so we can include year, month and day (UTC) in file logs
+        let log_file_path = PathBuf::from(
+            shellexpand::full(log_path.unwrap())
+                .expect("Could not find the correct path to log data")
+                .into_owned(),
+        );
+        let file_config = fern::Dispatch::new()
+            .format(move |out, message, record| {
+                out.finish(format_args!(
+                    "{date} {colored_level} {colored_target} > {colored_message}",
+                    date = Utc::now().format("%Y-%m-%dT%H:%M:%SUTC"),
+                    colored_level = format_args!(
+                        "\x1B[{}m{}\x1B[0m",
+                        colors_line.get_color(&record.level()).to_fg_str(),
+                        record.level()
+                    ),
+                    colored_target = format_args!("\x1B[95m{}\x1B[0m", record.target()),
+                    colored_message = format_args!(
+                        "\x1B[{}m{}\x1B[0m",
+                        colors_line.get_color(&record.level()).to_fg_str(),
+                        message
+                    ),
+                ))
+            })
+            .chain(fern::log_file(log_file_path)?);
+
         base_config
             .chain(file_config)
             .chain(stdout_config)
@@ -99,7 +135,7 @@ fn setup_logging(verbosity: u64, chain: bool) -> Result<()> {
         base_config.chain(stdout_config).apply()?;
     }
 
-    Ok(())
+    Ok(log_path)
 }
 
 #[derive(Serialize, Deserialize, Getters)]
@@ -180,45 +216,14 @@ struct RplRcloneConfig {
     transfers: u16,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        let stock_config = r#"[rpl]
-# rpl will use this percentage of available disk space as max_size
-# value range: 1-100, or 0 to use max_size value instead
-max_size_percentage = 0
-# max_size value allowed, if max_size_percentage is a positive number
-# then this field will have no effect
-max_size = "5 GiB"
-# only qbittorrent is available atm
-torrent_client = "qbittorrent"
-# rclone or any rclone's variant (fclone, gclone) used for uploading
-upload_client = "rclone"
-# temporary data from pack will be saved to here
-# this directory should be dedicated for rpl
-save_path = ""
-# rclone remote path for uploading. Example: "nugu:/rpl"
-remote_path = ""
-# Skip files that have size larger than max_size
-ignore_warning = false
-# set to true to seed the torrent through rclone's mount after rpl finishes
-seed = false
-# set the rclone's mount path
-seed_path = ""
-
-[qbittorrent]
-# default username of qbittorrent Web UI
-username = "admin"
-# default password of qbittorrent Web UI
-password = "adminadmin"
-# default address of qbittorrent Web UI
-address = "http://localhost:8080"
-
-[rclone]
-# default transfers of rclone
-transfers = 4"#;
-
-        Config::from_config(stock_config)
-    }
+fn write_default_config(config_path: &Path) {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(config_path)
+        .unwrap();
+    writeln!(file, "{}", STOCK_CONFIG)
+        .expect("Could not write config to file, maybe there is a permission error?");
 }
 
 impl Config {
@@ -227,25 +232,16 @@ impl Config {
         config
     }
 
-    fn write_config(&self) {
-        let mut config_file_path = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
-        config_file_path.push(PROGRAM_NAME);
-        config_file_path.set_extension("toml");
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(config_file_path)
-            .unwrap();
-        writeln!(file, "{}", toml::to_string(&self).unwrap())
-            .expect("Could not write config to file, maybe there is a permission error?");
-    }
-
     fn save_path_invalid(&self) -> bool {
         let save_path = &self.rpl.save_path;
         if save_path.is_empty() {
             true
         } else {
-            let path = Path::new(save_path);
+            let path = PathBuf::from(
+                shellexpand::full(save_path)
+                    .expect("Could not find the correct path to save data")
+                    .into_owned(),
+            );
             if !path.exists() {
                 debug!("{} does not exist. I will create it now", path.display());
                 fs::create_dir_all(path).unwrap();
@@ -259,7 +255,11 @@ impl Config {
         if seed_path.is_empty() {
             Ok(true)
         } else {
-            let path = Path::new(seed_path);
+            let path = PathBuf::from(
+                shellexpand::full(seed_path)
+                    .expect("Could not find the correct path to save data")
+                    .into_owned(),
+            );
             if !path.exists() {
                 error!(
                     "{} does not exist! rpl cannot seed after finishing leeching",
@@ -290,17 +290,19 @@ impl Config {
 }
 
 fn get_rpl_config() -> Result<Config, error::Error> {
-    let conf_file = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
+    let mut conf_file = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
+    conf_file.push(PROGRAM_NAME);
+    conf_file.set_file_name(PROGRAM_NAME);
+    conf_file.set_extension("toml");
 
     let config: Config;
     if !conf_file.exists() {
         util::create_proj_conf("", "", PROGRAM_NAME).unwrap();
-        config = Config::default();
-        config.write_config();
-    } else {
-        let s = fs::read_to_string(&conf_file).unwrap();
-        config = Config::from_config(&s);
+        write_default_config(&conf_file);
     }
+
+    let s = fs::read_to_string(&conf_file).unwrap();
+    config = Config::from_config(&s);
 
     Ok(config)
 }
@@ -319,22 +321,6 @@ fn get_running_config(
         return Err(error::Error::UnsupportedTorrentClient);
     }
 
-    let max_size_possible: u64 = fs2::available_space(&file_config.rpl.save_path).unwrap();
-    let max_size_allow: u64 = if let Some(percentage) = matches.value_of("max_size_percentage") {
-        let p: u64 = percentage.parse::<u64>().unwrap();
-        if p > 0 && p <= 100 {
-            max_size_possible * p / 100
-        } else {
-            return Err(error::Error::InvalidMaxSizePercentage);
-        }
-    } else if let Some(size) = matches.value_of("max_size") {
-        parse_size(size).expect("Could not parse max_size from input")
-    } else if file_config.max_size_percentage_used().unwrap() {
-        max_size_possible * (file_config.rpl.max_size_percentage as u64) / 100
-    } else {
-        parse_size(&file_config.rpl.max_size).expect("Could not parse max_size in file config")
-    };
-
     let upload_client = if let Some(client) = matches.value_of("upload_client") {
         client
     } else {
@@ -348,20 +334,45 @@ fn get_running_config(
         }
     }
 
-    let save_path = if let Some(path) = matches.value_of("save_path") {
-        match !Path::new(path).exists() {
+    let save_path: String = if let Some(p) = matches.value_of("save_path") {
+        let path = PathBuf::from(shellexpand::full(p).unwrap().into_owned());
+        match !path.exists() {
             true => {
                 return Err(error::Error::InvalidRplConfig);
             }
-            false => path,
+            false => String::from(path.to_str().unwrap()),
         }
     } else {
         match &file_config.save_path_invalid() {
             true => {
                 return Err(error::Error::InvalidRplConfig);
             }
-            false => &file_config.rpl.save_path,
+            false => String::from(&file_config.rpl.save_path),
         }
+    };
+
+    let max_size_possible: u64 = match fs2::available_space(PathBuf::from(
+        shellexpand::full(&file_config.rpl.save_path)
+            .unwrap()
+            .into_owned(),
+    )) {
+        Ok(size) => size,
+        Err(_e) => return Err(error::Error::InvalidRplConfig),
+    };
+
+    let max_size_allow: u64 = if let Some(percentage) = matches.value_of("max_size_percentage") {
+        let p: u64 = percentage.parse::<u64>().unwrap();
+        if p > 0 && p <= 100 {
+            max_size_possible * p / 100
+        } else {
+            return Err(error::Error::InvalidMaxSizePercentage);
+        }
+    } else if let Some(size) = matches.value_of("max_size") {
+        parse_size(size).expect("Could not parse max_size from input")
+    } else if file_config.max_size_percentage_used().unwrap() {
+        max_size_possible * (file_config.rpl.max_size_percentage as u64) / 100
+    } else {
+        parse_size(&file_config.rpl.max_size).expect("Could not parse max_size in file config")
     };
 
     let remote_path = if let Some(path) = matches.value_of("remote_path") {
@@ -394,12 +405,13 @@ fn get_running_config(
 
     let mut seed_path = String::new();
     if seed {
-        seed_path = if let Some(path) = matches.value_of("seed_path") {
-            match !Path::new(path).exists() {
+        seed_path = if let Some(p) = matches.value_of("seed_path") {
+            let path = PathBuf::from(shellexpand::full(p).unwrap().into_owned());
+            match path.exists() {
                 true => {
                     return Err(error::Error::MountPathNotExist);
                 }
-                false => String::from(path),
+                false => String::from(path.to_str().unwrap()),
             }
         } else {
             match &file_config.seed_path_invalid()? {
@@ -415,7 +427,7 @@ fn get_running_config(
         max_size_allow,
         //String::from(torrent_client),
         String::from(upload_client),
-        String::from(save_path),
+        save_path,
         String::from(remote_path),
         ignore_warning,
         seed,
@@ -471,10 +483,10 @@ async fn main() -> Result<()> {
                 .required(true),
         )
         .arg(
-            Arg::with_name("enable_logging")
-                .short("l")
+            Arg::with_name("log")
                 .long("log")
-                .help("Log output to logging file (for debugging)"),
+                .takes_value(true)
+                .help("Also log output to file (for debugging)"),
         )
         .arg(
             Arg::with_name("verbose")
@@ -499,27 +511,27 @@ async fn main() -> Result<()> {
         )
         .arg(
             Arg::with_name("torrent_client")
-                .long("tclient")
+                .long("torrent-client")
                 .takes_value(true)
                 .help("Set the torrent client"),
         )
         .arg(
             Arg::with_name("upload_client")
-                .long("uclient")
+                .long("upload-client")
                 .takes_value(true)
                 .help("Set the upload client"),
         )
         .arg(
             Arg::with_name("save_path")
                 .short("p")
-                .long("spath")
+                .long("save-path")
                 .takes_value(true)
                 .help("Set the save path"),
         )
         .arg(
             Arg::with_name("remote_path")
                 .short("r")
-                .long("rpath")
+                .long("remote-path")
                 .takes_value(true)
                 .help("Set the remote path"),
         )
@@ -536,7 +548,7 @@ async fn main() -> Result<()> {
         )
         .arg(
             Arg::with_name("seed_path")
-                .long("spath")
+                .long("seed-path")
                 .help("Set the rclone's mount path used for seeding"),
         )
         .arg(
@@ -566,18 +578,24 @@ async fn main() -> Result<()> {
         )
         .get_matches();
 
-    let chain = matches.is_present("enable_logging");
     let verbosity: u64 = matches.occurrences_of("verbose");
 
-    let data_dir = util::get_data_dir("", "", PROGRAM_NAME)?;
-    util::create_data_dir(&data_dir)?;
+    let lock = matches.is_present("log");
+    let log_path = if let Some(log) = matches.value_of("log") {
+        setup_logging(verbosity, true, Some(log))?
+    } else {
+        setup_logging(verbosity, false, None)?
+    };
 
-    setup_logging(verbosity, chain)?;
-    let mut log_file_path = util::get_data_dir("", "", PROGRAM_NAME)?;
-    log_file_path.push(PROGRAM_NAME);
-    log_file_path.set_extension("log");
-    let log_file = File::open(log_file_path)?;
-    log_file.lock_exclusive()?;
+    if lock {
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(log_path.unwrap())
+            .unwrap();
+        file.lock_exclusive()?;
+    }
+
     debug!("-----Logger is initialized. Starting main program!-----");
     let file_config = get_rpl_config()?;
 
@@ -630,6 +648,12 @@ async fn main() -> Result<()> {
         .await?;
 
     debug!("-----Everything is finished!-----");
-    log_file.unlock()?;
+    if lock {
+        let file = OpenOptions::new()
+            .write(true)
+            .open(log_path.unwrap())
+            .unwrap();
+        file.unlock()?;
+    }
     Ok(())
 }
