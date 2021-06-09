@@ -36,4 +36,6 @@ pub enum Error {
     QbitTorrentUnimplementedState,
     #[error("Config error: Unsupported torrent client")]
     UnsupportedTorrentClient,
+    #[error("Config error: Unsupported rclone variant (only rclone/fclone/gclone is supported)")]
+    UnsupportedRcloneVariant,
 }

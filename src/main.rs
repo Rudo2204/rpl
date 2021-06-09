@@ -4,7 +4,7 @@ use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Ar
 use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
-use log::{debug, LevelFilter};
+use log::{debug, error, LevelFilter};
 use parse_size::parse_size;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -313,8 +313,20 @@ fn get_running_config(
         &file_config.rpl.upload_client
     };
 
+    match upload_client {
+        "rclone" | "fclone" | "gclone" => (),
+        _ => {
+            return Err(error::Error::UnsupportedRcloneVariant);
+        }
+    }
+
     let save_path = if let Some(path) = matches.value_of("save_path") {
-        path
+        match !Path::new(path).exists() {
+            true => {
+                return Err(error::Error::InvalidRplConfig);
+            }
+            false => path,
+        }
     } else {
         match &file_config.save_path_invalid() {
             true => {
@@ -324,8 +336,13 @@ fn get_running_config(
         }
     };
 
-    let remote_path = if let Some(path) = matches.value_of("save_path") {
-        path
+    let remote_path = if let Some(path) = matches.value_of("remote_path") {
+        match !Path::new(path).exists() {
+            true => {
+                return Err(error::Error::InvalidRplConfig);
+            }
+            false => path,
+        }
     } else {
         match &file_config.remote_path_invalid() {
             true => {
