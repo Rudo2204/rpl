@@ -156,6 +156,17 @@ struct RplQbitConfig {
     address: String,
 }
 
+impl RplQbitConfig {
+    fn new(username: String, password: String, address: String) -> Self {
+        Self {
+            username,
+            password,
+            address,
+        }
+    }
+}
+
+// TODO: more configs?
 #[derive(Serialize, Deserialize, Getters)]
 struct RplRcloneConfig {
     transfers: u16,
@@ -342,6 +353,37 @@ fn get_running_config(
     Ok(running_config)
 }
 
+fn get_qb_config(
+    file_config: &Config,
+    matches: &ArgMatches,
+) -> Result<RplQbitConfig, error::Error> {
+    let username = if let Some(usr) = matches.value_of("qbittorrent_username") {
+        usr
+    } else {
+        &file_config.qbittorrent.username
+    };
+
+    let password = if let Some(pwd) = matches.value_of("qbittorrent_password") {
+        pwd
+    } else {
+        &file_config.qbittorrent.password
+    };
+
+    let address = if let Some(addr) = matches.value_of("qbittorrent_address") {
+        addr
+    } else {
+        &file_config.qbittorrent.address
+    };
+
+    let config = RplQbitConfig::new(
+        String::from(username),
+        String::from(password),
+        String::from(address),
+    );
+
+    Ok(config)
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let matches = App::new(PROGRAM_NAME)
@@ -415,38 +457,30 @@ async fn main() -> Result<()> {
                 .long("force")
                 .help("Force rpl to ignore warning"),
         )
-        .subcommand(
-            App::new("qbittorrent")
-                .about("Configure the username, password, address of qBittorrent Web UI")
-                .arg(
-                    Arg::with_name("username")
-                        .long("username")
-                        .takes_value(true)
-                        .help("Set the username of qBittorrent Web UI"),
-                )
-                .arg(
-                    Arg::with_name("password")
-                        .long("password")
-                        .takes_value(true)
-                        .help("Set the password of qBittorrent Web UI"),
-                )
-                .arg(
-                    Arg::with_name("address")
-                        .long("address")
-                        .takes_value(true)
-                        .help("Set the address of qBittorrent Web UI"),
-                ),
+        .arg(
+            Arg::with_name("qbittorrent_username")
+                .long("qbu")
+                .takes_value(true)
+                .help("Set the username of qBittorrent Web UI"),
         )
-        .subcommand(
-            App::new("rclone")
-                .about("Configure the parameters of rclone or its variants")
-                .arg(
-                    Arg::with_name("transfers")
-                        .short("t")
-                        .long("transfers")
-                        .takes_value(true)
-                        .help("Configure the number of transfers"),
-                ),
+        .arg(
+            Arg::with_name("qbittorrent_password")
+                .long("qbp")
+                .takes_value(true)
+                .help("Set the password of qBittorrent Web UI"),
+        )
+        .arg(
+            Arg::with_name("qbittorrent_address")
+                .long("qba")
+                .takes_value(true)
+                .help("Set the address of qBittorrent Web UI"),
+        )
+        .arg(
+            Arg::with_name("rclone_transfers")
+                .short("t")
+                .long("transfers")
+                .takes_value(true)
+                .help("Configure the number of transfers"),
         )
         .get_matches();
 
@@ -466,6 +500,13 @@ async fn main() -> Result<()> {
     let file_config = get_rpl_config()?;
 
     let config = get_running_config(&file_config, &matches)?;
+    let qbconfig = get_qb_config(&file_config, &matches)?;
+
+    let transfers: u16 = if let Some(trans) = matches.value_of("rclone_transfers") {
+        trans.parse().unwrap()
+    } else {
+        file_config.rclone.transfers
+    };
 
     let mut torrent_file = File::open(&matches.value_of("file").unwrap())?;
     let mut raw_torrent = Vec::new();
@@ -477,12 +518,7 @@ async fn main() -> Result<()> {
     )
     .max_size(config.max_size as i64);
 
-    let qbit = QbitConfig::new(
-        &file_config.qbittorrent.username,
-        &file_config.qbittorrent.password,
-        &file_config.qbittorrent.address,
-    )
-    .await?;
+    let qbit = QbitConfig::new(&qbconfig.username, &qbconfig.password, &qbconfig.address).await?;
 
     let torrent_config = QbitTorrent::default()
         .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
@@ -497,7 +533,7 @@ async fn main() -> Result<()> {
         config.upload_client,
         PathBuf::from(shellexpand::full(&config.save_path).unwrap().into_owned()),
         config.remote_path,
-        4,
+        transfers,
     );
 
     pack_config
