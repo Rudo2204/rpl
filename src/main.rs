@@ -118,6 +118,8 @@ struct RplConfig {
     save_path: String,
     remote_path: String,
     ignore_warning: bool,
+    seed: bool,
+    seed_path: String,
 }
 
 struct RplRunningConfig {
@@ -127,6 +129,8 @@ struct RplRunningConfig {
     save_path: String,
     remote_path: String,
     ignore_warning: bool,
+    seed: bool,
+    seed_path: String,
 }
 
 impl RplRunningConfig {
@@ -137,6 +141,8 @@ impl RplRunningConfig {
         save_path: String,
         remote_path: String,
         ignore_warning: bool,
+        seed: bool,
+        seed_path: String,
     ) -> Self {
         Self {
             max_size,
@@ -145,6 +151,8 @@ impl RplRunningConfig {
             save_path,
             remote_path,
             ignore_warning,
+            seed,
+            seed_path,
         }
     }
 }
@@ -192,6 +200,10 @@ save_path = ""
 remote_path = ""
 # Skip files that have size larger than max_size
 ignore_warning = false
+# set to true to seed the torrent through rclone's mount after rpl finishes
+seed = false
+# set the rclone's mount path
+seed_path = ""
 
 [qbittorrent]
 # default username of qbittorrent Web UI
@@ -239,6 +251,24 @@ impl Config {
                 fs::create_dir_all(path).unwrap();
             }
             return false;
+        }
+    }
+
+    fn seed_path_invalid(&self) -> Result<bool, error::Error> {
+        let seed_path = &self.rpl.seed_path;
+        if seed_path.is_empty() {
+            return Ok(true);
+        } else {
+            let path = Path::new(seed_path);
+            if !path.exists() {
+                error!(
+                    "{} does not exist! rpl cannot seed after finishing leeching",
+                    path.display()
+                );
+                return Err(error::Error::MountPathNotExist);
+            } else {
+                return Ok(false);
+            }
         }
     }
 
@@ -358,6 +388,28 @@ fn get_running_config(
         file_config.rpl.ignore_warning
     };
 
+    let seed: bool = if matches.is_present("seed") {
+        true
+    } else {
+        file_config.rpl.seed
+    };
+
+    let seed_path = if let Some(path) = matches.value_of("seed_path") {
+        match !Path::new(path).exists() {
+            true => {
+                return Err(error::Error::MountPathNotExist);
+            }
+            false => path,
+        }
+    } else {
+        match &file_config.seed_path_invalid()? {
+            true => {
+                return Err(error::Error::MountPathNotExist);
+            }
+            false => &file_config.rpl.seed_path,
+        }
+    };
+
     let running_config = RplRunningConfig::new(
         max_size_allow,
         //String::from(torrent_client),
@@ -365,6 +417,8 @@ fn get_running_config(
         String::from(save_path),
         String::from(remote_path),
         ignore_warning,
+        seed,
+        String::from(seed_path),
     );
 
     Ok(running_config)
@@ -475,6 +529,16 @@ async fn main() -> Result<()> {
                 .help("Force rpl to ignore warning"),
         )
         .arg(
+            Arg::with_name("seed")
+                .long("seed")
+                .help("Seed the torrent after rpl finishes leeching"),
+        )
+        .arg(
+            Arg::with_name("seed_path")
+                .long("spath")
+                .help("Set the rclone's mount path used for seeding"),
+        )
+        .arg(
             Arg::with_name("qbittorrent_username")
                 .long("qbu")
                 .takes_value(true)
@@ -559,6 +623,8 @@ async fn main() -> Result<()> {
             torrent_config,
             qbit,
             upload_client,
+            config.seed,
+            &config.seed_path,
         )
         .await?;
 

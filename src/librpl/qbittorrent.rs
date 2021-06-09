@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::convert::TryInto;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tokio::time::{sleep, Duration};
 
 use crate::librpl::rclone::RcloneClient;
@@ -416,6 +417,8 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
         config: QbitTorrent,
         torrent_client: QbitConfig,
         upload_client: RcloneClient,
+        seed: bool,
+        seed_path: &'a str,
     ) -> Result<(), error::Error> {
         let hash = self.info_hash();
 
@@ -461,6 +464,16 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
 
             offset += job.no_files;
         }
+
+        if seed {
+            info!("Adding the torrent back to qbittorrent for seeding through rclone's mount");
+            let seed_config = config
+                .skip_hash_checking(true)
+                .save_path(PathBuf::from_str(seed_path).unwrap());
+            torrent_client.add_new_torrent(seed_config).await?;
+            torrent_client.resume_torrent(&hash).await?;
+        }
+
         Ok(())
     }
 }

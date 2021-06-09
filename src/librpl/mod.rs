@@ -84,6 +84,8 @@ where
         config: P,
         torrent_client: C,
         upload_client: RcloneClient,
+        seed: bool,
+        seed_path: &'a str,
     ) -> Result<(), error::Error>;
 }
 
