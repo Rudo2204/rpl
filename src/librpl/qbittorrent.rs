@@ -78,12 +78,12 @@ pub enum State {
 
 #[derive(Debug, Deserialize, Getters)]
 pub struct QbitTorrentInfo {
-    added_on: i32,
+    added_on: u32,
     amount_left: u64,
     auto_tmm: bool,
     category: String,
     completed: i64,
-    completion_on: i32,
+    completion_on: u32,
     dl_limit: i64,
     dlspeed: u64,
     downloaded: i64,
