@@ -516,11 +516,11 @@ impl RplQbit for Job {
                 State::Error | State::PausedDL => return Err(error::Error::QbitTorrentErrored),
                 State::Downloading => {
                     pb.set_message(format!("Downloading chunk {}", self.chunk));
-                    pb.set_position(current_info.amount_left);
+                    pb.set_position(size - current_info.amount_left);
                 }
                 State::StalledDL => {
                     pb.set_message(format!("[Stalled] Downloading chunk {}", self.chunk));
-                    pb.set_position(current_info.amount_left);
+                    pb.set_position(size - current_info.amount_left);
                 }
                 State::PausedUP | State::StalledUP | State::Uploading | State::QueuedUP => {
                     return Ok(())
