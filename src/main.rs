@@ -192,7 +192,7 @@ max_size = "5 GiB"
 # only qbittorrent is available atm
 torrent_client = "qbittorrent"
 # rclone or any rclone's variant (fclone, gclone) used for uploading
-uclone_client = "rclone"
+upload_client = "rclone"
 # temporary data from pack will be saved to here
 # this directory should be dedicated for rpl
 save_path = ""
