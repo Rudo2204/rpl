@@ -6,7 +6,7 @@ use derive_builder::Builder;
 use derive_getters::Getters;
 use indicatif::{ProgressBar, ProgressStyle};
 use lava_torrent::torrent::v1::Torrent;
-use log::{debug, info};
+use log::{debug, error, info};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -456,6 +456,8 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
             info!("Downloading chunk {}/{}", job.chunk, no_jobs);
             job.download(&torrent_client, &hash).await?;
             info!("Finished downloading chunk {}/{}", job.chunk, no_jobs);
+            debug!("Sleeping 3s for qBittorrent to move files");
+            sleep(Duration::from_millis(3000)).await;
             info!("Uploading chunk {}/{}", job.chunk, no_jobs);
             job.upload(&upload_client)?;
             info!("Finished uploading chunk {}/{}", job.chunk, no_jobs);
@@ -513,7 +515,34 @@ impl RplQbit for Job {
             let current_info = client.get_torrent_info(hash).await?;
             let state = current_info.state();
             match state {
-                State::Error | State::PausedDL => return Err(error::Error::QbitTorrentErrored),
+                State::PausedDL => {
+                    debug!("qBittorrent entered PausedDL state (maybe qBittorrent has not resumed the torrent yet). Will now wait 5s and try again...");
+                    sleep(Duration::from_millis(5000)).await;
+
+                    let retry_current_info = client.get_torrent_info(hash).await?;
+                    let retry_state = retry_current_info.state();
+                    match retry_state {
+                        State::PausedDL => {
+                            error!("The torrent did not leave PausedDL state after 5s of retry attempt. Maybe it has been manually paused by the user!");
+                            return Err(error::Error::QbitTorrentErrored);
+                        }
+                        State::Error => {
+                            error!("qBittorrent entered Error state!");
+                            return Err(error::Error::QbitTorrentErrored);
+                        }
+                        State::Downloading
+                        | State::StalledDL
+                        | State::PausedUP
+                        | State::StalledUP
+                        | State::Uploading
+                        | State::QueuedUP => continue,
+                        _ => return Err(error::Error::QbitTorrentUnimplementedState),
+                    }
+                }
+                State::Error => {
+                    error!("qBittorrent entered Error state!");
+                    return Err(error::Error::QbitTorrentErrored);
+                }
                 State::Downloading => {
                     pb.set_message(format!("Downloading chunk {}", self.chunk));
                     pb.set_position(size - current_info.amount_left);
