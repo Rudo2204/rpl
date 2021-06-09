@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-
 use async_trait::async_trait;
 use derive_builder::Builder;
 use derive_getters::Getters;
@@ -9,8 +6,6 @@ use lava_torrent::torrent::v1::Torrent;
 use log::{debug, error, info};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
-use std::cmp::min;
-use std::convert::TryInto;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tokio::time::{sleep, Duration};
@@ -165,6 +160,9 @@ impl QbitConfig {
         headers.insert("Referer", address.parse()?);
 
         let client = reqwest::Client::builder()
+            // Related to issue: https://github.com/hyperium/hyper/issues/2136
+            // https://github.com/wyyerd/stripe-rs/issues/173
+            .pool_max_idle_per_host(0)
             .default_headers(headers)
             .build()?;
 
@@ -371,10 +369,10 @@ impl QbitTorrent {
         form
     }
 
-    pub fn url(mut self, url: String) -> Self {
-        self.urls = Some(url);
-        self
-    }
+    //pub fn url(mut self, url: String) -> Self {
+    //    self.urls = Some(url);
+    //    self
+    //}
 
     pub fn torrents(mut self, torrent: Torrent) -> Self {
         self.torrents = Some(
