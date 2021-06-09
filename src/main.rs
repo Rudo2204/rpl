@@ -233,6 +233,7 @@ impl Config {
         config_file_path.set_extension("toml");
         let mut file = OpenOptions::new()
             .write(true)
+            .create(true)
             .open(config_file_path)
             .unwrap();
         writeln!(file, "{}", toml::to_string(&self).unwrap())
