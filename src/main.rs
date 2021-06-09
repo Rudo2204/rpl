@@ -491,12 +491,12 @@ async fn main() -> Result<()> {
     util::create_data_dir(&data_dir)?;
 
     setup_logging(verbosity, chain)?;
-    let log_file_path =
-        util::get_data_dir("", "", PROGRAM_NAME)?.join(format!("{}.log", PROGRAM_NAME));
+    let mut log_file_path = util::get_data_dir("", "", PROGRAM_NAME)?;
+    log_file_path.push(PROGRAM_NAME);
+    log_file_path.set_extension("log");
     let log_file = File::open(log_file_path)?;
     log_file.lock_exclusive()?;
     debug!("-----Logger is initialized. Starting main program!-----");
-    // TODO: subcommand handling here
     let file_config = get_rpl_config()?;
 
     let config = get_running_config(&file_config, &matches)?;
