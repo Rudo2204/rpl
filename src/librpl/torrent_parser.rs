@@ -74,7 +74,7 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
 
         while files_in_downloaded != files_in_pack {
             let mut current_sum_size: i64 = 0;
-            for (index, file) in file_vecs.into_iter().enumerate() {
+            for (index, file) in file_vecs.iter().enumerate() {
                 if downloaded.contains_key(&file.path) {
                     continue;
                 } else {

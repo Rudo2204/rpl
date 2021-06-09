@@ -182,7 +182,7 @@ impl QbitConfig {
         };
 
         let cookie_str = headers.to_str()?;
-        let cookie_header = match cookie_str.find(";") {
+        let cookie_header = match cookie_str.find(';') {
             Some(index) => index,
             None => return Err(error::Error::MissingCookie),
         };
@@ -317,7 +317,7 @@ impl QbitConfig {
             .await?;
 
         let all_torrents: Vec<QbitTorrentInfo> = serde_json::from_slice(&res)?;
-        let ret_torrent = all_torrents.into_iter().nth(0);
+        let ret_torrent = all_torrents.into_iter().next();
         match ret_torrent {
             Some(torrent_info) => Ok(torrent_info),
             None => Err(error::Error::QbitEmptyTorrentInfo),
@@ -504,7 +504,7 @@ impl RplQbit for Job {
         client.resume_torrent(hash).await?;
         let size = self.total_size as u64;
 
-        let pb = ProgressBar::new(size.try_into().expect("Torrent size is negative?"));
+        let pb = ProgressBar::new(size);
         pb.set_style(ProgressStyle::default_bar()
             .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
             .progress_chars("#>-"));

@@ -88,16 +88,12 @@ impl RplUpload for Job {
         reader
             .lines()
             .filter_map(|line| line.ok())
-            .filter(|line| line.find("ETA").is_some())
+            .filter(|line| line.contains("ETA"))
             .for_each(|line| {
                 let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
-                match resp.stats.eta {
-                    Some(_eta) => {
-                        pb.set_message(format!("Uploading chunk {}", self.chunk));
-                        pb.set_position(resp.stats.bytes);
-                    }
-                    // Still waiting for rclone
-                    None => (),
+                if let Some(_eta) = resp.stats.eta {
+                    pb.set_message(format!("Uploading chunk {}", self.chunk));
+                    pb.set_position(resp.stats.bytes);
                 }
             });
 

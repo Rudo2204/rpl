@@ -217,8 +217,7 @@ address = "http://localhost:8080"
 # default transfers of rclone
 transfers = 4"#;
 
-        let config = Config::from_config(stock_config);
-        config
+        Config::from_config(stock_config)
     }
 }
 
@@ -243,21 +242,21 @@ impl Config {
     fn save_path_invalid(&self) -> bool {
         let save_path = &self.rpl.save_path;
         if save_path.is_empty() {
-            return true;
+            true
         } else {
             let path = Path::new(save_path);
             if !path.exists() {
                 debug!("{} does not exist. I will create it now", path.display());
                 fs::create_dir_all(path).unwrap();
             }
-            return false;
+            false
         }
     }
 
     fn seed_path_invalid(&self) -> Result<bool, error::Error> {
         let seed_path = &self.rpl.seed_path;
         if seed_path.is_empty() {
-            return Ok(true);
+            Ok(true)
         } else {
             let path = Path::new(seed_path);
             if !path.exists() {
@@ -265,9 +264,9 @@ impl Config {
                     "{} does not exist! rpl cannot seed after finishing leeching",
                     path.display()
                 );
-                return Err(error::Error::MountPathNotExist);
+                Err(error::Error::MountPathNotExist)
             } else {
-                return Ok(false);
+                Ok(false)
             }
         }
     }
@@ -279,13 +278,13 @@ impl Config {
     fn max_size_percentage_used(&self) -> Result<bool, error::Error> {
         // Can't use match here because https://github.com/rust-lang/rust/issues/37854
         let tmp = self.rpl.max_size_percentage;
-        return if tmp == 0 {
+        if tmp == 0 {
             Ok(false)
         } else if tmp > 0 && tmp <= 100 {
             Ok(true)
         } else {
             Err(error::Error::InvalidMaxSizePercentage)
-        };
+        }
     }
 }
 
@@ -329,12 +328,10 @@ fn get_running_config(
         }
     } else if let Some(size) = matches.value_of("max_size") {
         parse_size(size).expect("Could not parse max_size from input")
+    } else if file_config.max_size_percentage_used().unwrap() {
+        max_size_possible * (file_config.rpl.max_size_percentage as u64) / 100
     } else {
-        if file_config.max_size_percentage_used().unwrap() {
-            max_size_possible * (file_config.rpl.max_size_percentage as u64) / 100
-        } else {
-            parse_size(&file_config.rpl.max_size).expect("Could not parse max_size in file config")
-        }
+        parse_size(&file_config.rpl.max_size).expect("Could not parse max_size in file config")
     };
 
     let upload_client = if let Some(client) = matches.value_of("upload_client") {
