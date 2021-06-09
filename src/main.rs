@@ -391,21 +391,24 @@ fn get_running_config(
         file_config.rpl.seed
     };
 
-    let seed_path = if let Some(path) = matches.value_of("seed_path") {
-        match !Path::new(path).exists() {
-            true => {
-                return Err(error::Error::MountPathNotExist);
+    let mut seed_path = String::new();
+    if seed {
+        seed_path = if let Some(path) = matches.value_of("seed_path") {
+            match !Path::new(path).exists() {
+                true => {
+                    return Err(error::Error::MountPathNotExist);
+                }
+                false => String::from(path),
             }
-            false => path,
-        }
-    } else {
-        match &file_config.seed_path_invalid()? {
-            true => {
-                return Err(error::Error::MountPathNotExist);
+        } else {
+            match &file_config.seed_path_invalid()? {
+                true => {
+                    return Err(error::Error::MountPathNotExist);
+                }
+                false => String::from(&file_config.rpl.seed_path),
             }
-            false => &file_config.rpl.seed_path,
-        }
-    };
+        };
+    }
 
     let running_config = RplRunningConfig::new(
         max_size_allow,
@@ -415,7 +418,7 @@ fn get_running_config(
         String::from(remote_path),
         ignore_warning,
         seed,
-        String::from(seed_path),
+        seed_path,
     );
 
     Ok(running_config)
