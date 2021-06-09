@@ -206,8 +206,13 @@ impl Config {
     }
 
     fn write_config(&self) {
-        let config_dir = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
-        let mut file = OpenOptions::new().write(true).open(config_dir).unwrap();
+        let mut config_file_path = util::get_conf_dir("", "", PROGRAM_NAME).unwrap();
+        config_file_path.push(PROGRAM_NAME);
+        config_file_path.set_extension("toml");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .open(config_file_path)
+            .unwrap();
         writeln!(file, "{}", toml::to_string(&self).unwrap())
             .expect("Could not write config to file, maybe there is a permission error?");
     }
@@ -241,11 +246,6 @@ impl Config {
             Err(error::Error::InvalidMaxSizePercentage)
         };
     }
-
-    fn max_size_allow_invalid(&self) -> Result<bool, error::Error> {
-        let _size = parse_size::parse_size(&self.rpl.max_size()).unwrap();
-        Ok(false)
-    }
 }
 
 fn get_rpl_config() -> Result<Config, error::Error> {
@@ -259,14 +259,6 @@ fn get_rpl_config() -> Result<Config, error::Error> {
     } else {
         let s = fs::read_to_string(&conf_file).unwrap();
         config = Config::from_config(&s);
-    }
-
-    if config.save_path_invalid()
-        || config.remote_path_invalid()
-        || config.max_size_percentage_used().is_err()
-        || config.max_size_allow_invalid().is_err()
-    {
-        return Err(error::Error::InvalidRplConfig);
     }
 
     Ok(config)
@@ -313,13 +305,23 @@ fn get_running_config(
     let save_path = if let Some(path) = matches.value_of("save_path") {
         path
     } else {
-        &file_config.rpl.save_path
+        match &file_config.save_path_invalid() {
+            true => {
+                return Err(error::Error::InvalidRplConfig);
+            }
+            false => &file_config.rpl.save_path,
+        }
     };
 
     let remote_path = if let Some(path) = matches.value_of("save_path") {
         path
     } else {
-        &file_config.rpl.remote_path
+        match &file_config.remote_path_invalid() {
+            true => {
+                return Err(error::Error::InvalidRplConfig);
+            }
+            false => &file_config.rpl.remote_path,
+        }
     };
 
     let ignore_warning: bool = if matches.is_present("ignore_warning") {
