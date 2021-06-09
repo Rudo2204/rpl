@@ -42,7 +42,8 @@ remote_path = ""
 ignore_warning = false
 # set to true to seed the torrent through rclone's mount after rpl finishes
 seed = false
-# set the rclone's mount path
+# set the rclone's mount path (remote mount path should be the same as remote_path)
+# Example: `rclone mount nugu:/rpl ~/mount` then seed_path should be `~/mount`
 seed_path = ""
 
 [qbittorrent]
