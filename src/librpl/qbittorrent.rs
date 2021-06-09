@@ -260,7 +260,7 @@ impl QbitConfig {
     }
 
     pub async fn resume_torrent(&self, hash: &str) -> Result<(), error::Error> {
-        let form = Form::new().text("hash", hash.to_string());
+        let form = Form::new().text("hashes", hash.to_string());
 
         let res = self
             .client
