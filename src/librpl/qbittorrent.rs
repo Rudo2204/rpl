@@ -7,7 +7,6 @@ use log::{debug, error, info};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::str::FromStr;
 use tokio::time::{sleep, Duration};
 
 use crate::librpl::rclone::RcloneClient;
@@ -467,9 +466,9 @@ impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<
 
         if seed {
             info!("Adding the torrent back to qbittorrent for seeding through rclone's mount");
-            let seed_config = config
-                .skip_hash_checking(true)
-                .save_path(PathBuf::from_str(seed_path).unwrap());
+            let seed_config = config.skip_hash_checking(true).save_path(PathBuf::from(
+                shellexpand::full(seed_path).unwrap().into_owned(),
+            ));
             torrent_client.add_new_torrent(seed_config).await?;
             torrent_client.resume_torrent(&hash).await?;
         }
