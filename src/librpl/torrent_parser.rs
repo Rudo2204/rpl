@@ -70,7 +70,7 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
         let files_in_pack = file_vecs.len();
 
         let mut chunks: HashMap<&PathBuf, RplFile> = HashMap::new();
-        let mut current_chunk: i32 = 0;
+        let mut current_chunk: i32 = 1;
 
         while files_in_downloaded != files_in_pack {
             let mut current_sum_size: i64 = 0;
