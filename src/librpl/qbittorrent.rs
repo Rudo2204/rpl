@@ -224,8 +224,8 @@ impl QbitConfig {
 
         match res.error_for_status() {
             Ok(_) => {
-                debug!("Sleeping 500ms for qbittorrent to add the torrent...");
-                sleep(Duration::from_millis(500)).await;
+                debug!("Sleeping 1s for qbittorrent to add the torrent...");
+                sleep(Duration::from_millis(1000)).await;
                 Ok(())
             }
             Err(e) => Err(error::Error::from(e)),
@@ -318,6 +318,30 @@ impl QbitConfig {
         match ret_torrent {
             Some(torrent_info) => Ok(torrent_info),
             None => Err(error::Error::QbitEmptyTorrentInfo),
+        }
+    }
+
+    pub async fn set_share_limit(&self, hash: &str) -> Result<(), error::Error> {
+        let form = Form::new()
+            .text("hashes", hash.to_string())
+            .text("ratioLimit", "-1")
+            .text("seedingTimeLimit", "-1");
+
+        let res = self
+            .client
+            .post(&format!("{}/api/v2/torrents/setShareLimits", self.address))
+            .multipart(form)
+            .headers(self.make_headers()?)
+            .send()
+            .await?;
+
+        match res.error_for_status() {
+            Ok(_) => {
+                debug!("Sleeping 500ms for qbittorrent to set the torrent limit to unlimited...");
+                sleep(Duration::from_millis(500)).await;
+                Ok(())
+            }
+            Err(e) => Err(error::Error::from(e)),
         }
     }
 }
@@ -441,6 +465,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         for job in jobs {
             job.info();
             torrent_client.add_new_torrent(config.clone()).await?;
+            torrent_client.set_share_limit(&hash).await?;
             let disable_others = &job.disable_others(offset, no_all_files);
             match disable_others {
                 Some(disable_string) => {
