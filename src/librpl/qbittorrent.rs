@@ -453,8 +453,6 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
             info!("Downloading chunk {}/{}", job.chunk, no_jobs);
             job.download(&torrent_client, &hash).await?;
             info!("Finished downloading chunk {}/{}", job.chunk, no_jobs);
-            debug!("Sleeping 3s for qBittorrent to move files");
-            sleep(Duration::from_millis(3000)).await;
             info!("Uploading chunk {}/{}", job.chunk, no_jobs);
             job.upload(&upload_client)?;
             info!("Finished uploading chunk {}/{}", job.chunk, no_jobs);
@@ -508,10 +506,24 @@ impl RplQbit for Job {
             .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
             .progress_chars("#>-"));
 
+        pb.set_message(format!("Waiting to download chunk {}", self.chunk));
+
         loop {
             let current_info = client.get_torrent_info(hash).await?;
             let state = current_info.state();
             match state {
+                State::Moving => {
+                    pb.set_message(format!("Moving files of chunk {}", self.chunk));
+                    sleep(Duration::from_millis(2000)).await;
+                }
+                State::Allocating => {
+                    pb.set_message(format!("Allocating data of chunk {}", self.chunk));
+                    sleep(Duration::from_millis(2000)).await;
+                }
+                State::MetaDL => {
+                    pb.set_message(format!("Downloading metadata of chunk {}", self.chunk));
+                    sleep(Duration::from_millis(2000)).await;
+                }
                 State::PausedDL => {
                     debug!("qBittorrent entered PausedDL state (maybe qBittorrent has not resumed the torrent yet). Will now wait 5s and try again...");
                     sleep(Duration::from_millis(5000)).await;
@@ -523,21 +535,15 @@ impl RplQbit for Job {
                             error!("The torrent did not leave PausedDL state after 5s of retry attempt. Maybe it has been manually paused by the user!");
                             return Err(error::Error::QbitTorrentErrored);
                         }
-                        State::Error => {
-                            error!("qBittorrent entered Error state!");
-                            return Err(error::Error::QbitTorrentErrored);
-                        }
-                        State::Downloading
-                        | State::StalledDL
-                        | State::PausedUP
-                        | State::StalledUP
-                        | State::Uploading
-                        | State::QueuedUP => continue,
-                        _ => return Err(error::Error::QbitTorrentUnimplementedState),
+                        _ => continue,
                     }
                 }
                 State::Error => {
                     error!("qBittorrent entered Error state!");
+                    return Err(error::Error::QbitTorrentErrored);
+                }
+                State::MissingFiles => {
+                    error!("qBittorrent entered MissingFiles error state!");
                     return Err(error::Error::QbitTorrentErrored);
                 }
                 State::Downloading => {
@@ -548,10 +554,28 @@ impl RplQbit for Job {
                     pb.set_message(format!("[Stalled] Downloading chunk {}", self.chunk));
                     pb.set_position(size - current_info.amount_left);
                 }
-                State::PausedUP | State::StalledUP | State::Uploading | State::QueuedUP => {
-                    return Ok(())
+                State::QueuedDL => {
+                    pb.set_message(format!("[Queued] Downloading chunk {}", self.chunk));
+                    pb.set_position(size - current_info.amount_left);
                 }
-                _ => return Err(error::Error::QbitTorrentUnimplementedState),
+                State::ForceDL => {
+                    pb.set_message(format!("[Forced] Downloading chunk {}", self.chunk));
+                    pb.set_position(size - current_info.amount_left);
+                }
+                State::CheckingDL => {
+                    pb.set_message(format!("[Checking] Downloading chunk {}", self.chunk));
+                    pb.set_position(size - current_info.amount_left);
+                }
+                State::PausedUP
+                | State::StalledUP
+                | State::Uploading
+                | State::QueuedUP
+                | State::ForcedUP
+                | State::CheckingUP => return Ok(()),
+                _ => {
+                    error!("qBittorrent entered unexpected {:?} state", state);
+                    return Err(error::Error::QbitTorrentUnimplementedState);
+                }
             }
 
             sleep(Duration::from_millis(1000)).await;
