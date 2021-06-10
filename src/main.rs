@@ -630,6 +630,7 @@ async fn main() -> Result<()> {
 
     let torrent_config = QbitTorrent::default()
         .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
+        .skip_hash_checking(true)
         .paused(true)
         .save_path(PathBuf::from(
             shellexpand::full(&config.save_path)

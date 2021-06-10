@@ -76,6 +76,7 @@ where
     P: RplPackConfig,
     C: RplClient,
 {
+    #[allow(clippy::too_many_arguments)]
     async fn leech_torrent(
         &'a mut self,
         data: Torrent,
