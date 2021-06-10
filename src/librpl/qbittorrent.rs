@@ -440,6 +440,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         upload_client: RcloneClient,
         seed: bool,
         seed_path: &'a str,
+        skip: usize,
     ) -> Result<(), error::Error> {
         let hash = self.info_hash();
 
@@ -462,7 +463,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
 
         let mut offset = 0;
 
-        for job in jobs {
+        for job in jobs.iter().skip(skip) {
             job.info();
             torrent_client.add_new_torrent(config.clone()).await?;
             torrent_client.set_share_limit(&hash).await?;

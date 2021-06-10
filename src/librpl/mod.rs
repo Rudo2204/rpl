@@ -84,6 +84,7 @@ where
         upload_client: RcloneClient,
         seed: bool,
         seed_path: &'a str,
+        skip: usize,
     ) -> Result<(), error::Error>;
 }
 

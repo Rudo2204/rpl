@@ -1,6 +1,8 @@
 use anyhow::Result;
 use chrono::{Local, Utc};
-use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{
+    crate_authors, crate_description, crate_version, value_t, App, AppSettings, Arg, ArgMatches,
+};
 use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
@@ -553,6 +555,12 @@ async fn main() -> Result<()> {
                 .help("Set the rclone's mount path used for seeding"),
         )
         .arg(
+            Arg::with_name("skip")
+                .long("skip")
+                .takes_value(true)
+                .help("Skip number of chunks (in case of rpl unexpectedly crashes)"),
+        )
+        .arg(
             Arg::with_name("qbittorrent_username")
                 .long("qbu")
                 .takes_value(true)
@@ -580,6 +588,11 @@ async fn main() -> Result<()> {
         .get_matches();
 
     let verbosity: u64 = matches.occurrences_of("verbose");
+    let skip: usize = if let Some(_val) = matches.value_of("skip") {
+        value_t!(matches, "skip", usize).expect("Could not parse the value of skip")
+    } else {
+        0
+    };
 
     let lock = matches.is_present("log");
     let log_path = if let Some(log) = matches.value_of("log") {
@@ -645,6 +658,7 @@ async fn main() -> Result<()> {
             upload_client,
             config.seed,
             &config.seed_path,
+            skip,
         )
         .await?;
 
