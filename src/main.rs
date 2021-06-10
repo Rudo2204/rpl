@@ -71,15 +71,9 @@ fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<
     let mut base_config = fern::Dispatch::new();
 
     base_config = match verbosity {
-        0 => base_config
-            .level(LevelFilter::Warn)
-            .level_for(PROGRAM_NAME, LevelFilter::Warn),
-        1 => base_config
-            .level(LevelFilter::Info)
-            .level_for(PROGRAM_NAME, LevelFilter::Info),
-        2 => base_config
-            .level(LevelFilter::Info)
-            .level_for(PROGRAM_NAME, LevelFilter::Debug),
+        0 => base_config.level(LevelFilter::Warn),
+        1 => base_config.level(LevelFilter::Info),
+        2 => base_config.level(LevelFilter::Debug),
         _3_or_more => base_config.level(LevelFilter::Trace),
     };
 
