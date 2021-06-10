@@ -582,8 +582,8 @@ async fn main() -> Result<()> {
         .get_matches();
 
     let verbosity: u64 = matches.occurrences_of("verbose");
-    let skip: usize = if let Some(_val) = matches.value_of("skip") {
-        value_t!(matches, "skip", usize).expect("Could not parse the value of skip")
+    let skip = if let Some(_val) = matches.value_of("skip") {
+        value_t!(matches, "skip", u32).expect("Could not parse the value of skip")
     } else {
         0
     };

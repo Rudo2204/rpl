@@ -440,7 +440,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         upload_client: RcloneClient,
         seed: bool,
         seed_path: &'a str,
-        skip: usize,
+        skip: u32,
     ) -> Result<(), error::Error> {
         let hash = self.info_hash();
 
@@ -462,9 +462,15 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         let no_jobs = jobs.len();
 
         let mut offset = 0;
+        let mut skipped = skip;
 
-        for job in jobs.iter().skip(skip) {
+        for job in jobs {
             job.info();
+            if skipped > 0 {
+                info!("Chunk {} has been skipped", job.chunk);
+                skipped -= 1;
+                continue;
+            }
             torrent_client.add_new_torrent(config.clone()).await?;
             torrent_client.set_share_limit(&hash).await?;
             let disable_others = &job.disable_others(offset, no_all_files);
