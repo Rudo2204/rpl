@@ -469,6 +469,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
             if skipped > 0 {
                 info!("Chunk {} has been skipped", job.chunk);
                 skipped -= 1;
+                offset += job.no_files;
                 continue;
             }
             torrent_client.add_new_torrent(config.clone()).await?;
@@ -496,10 +497,11 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
 
         if seed {
             info!("Adding the torrent back to qbittorrent for seeding through rclone's mount");
-            let seed_config = config.skip_hash_checking(true).save_path(PathBuf::from(
+            let seed_config = config.save_path(PathBuf::from(
                 shellexpand::full(seed_path).unwrap().into_owned(),
             ));
             torrent_client.add_new_torrent(seed_config).await?;
+            torrent_client.set_share_limit(&hash).await?;
             torrent_client.resume_torrent(&hash).await?;
         }
 
@@ -546,15 +548,15 @@ impl RplQbit for Job {
             match state {
                 State::Moving => {
                     pb.set_message(format!("Moving files of chunk {}", self.chunk));
-                    sleep(Duration::from_millis(2000)).await;
+                    sleep(Duration::from_millis(1000)).await;
                 }
                 State::Allocating => {
                     pb.set_message(format!("Allocating data of chunk {}", self.chunk));
-                    sleep(Duration::from_millis(2000)).await;
+                    sleep(Duration::from_millis(1000)).await;
                 }
                 State::MetaDL => {
                     pb.set_message(format!("Downloading metadata of chunk {}", self.chunk));
-                    sleep(Duration::from_millis(2000)).await;
+                    sleep(Duration::from_millis(1000)).await;
                 }
                 State::PausedDL => {
                     debug!("qBittorrent entered PausedDL state (maybe qBittorrent has not resumed the torrent yet). Will now wait 5s and try again...");
