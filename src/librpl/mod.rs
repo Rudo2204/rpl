@@ -100,7 +100,7 @@ impl Queue {
 }
 
 pub fn build_queue(datamap: HashMap<&PathBuf, RplFile<'_>>, torrent: Torrent) -> Queue {
-    let mut current_chunk = 0;
+    let mut current_chunk = 1;
     let mut total_size: i64 = 0;
     let mut job: Vec<Job> = Vec::new();
     let mut files = 0;
