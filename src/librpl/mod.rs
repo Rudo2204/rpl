@@ -22,16 +22,14 @@ pub trait RplPackConfig {}
 pub struct RplFile<'a> {
     filename: &'a str,
     length: i64,
-    downloaded: bool,
     chunk: i32,
 }
 
 impl<'a> RplFile<'a> {
-    fn new(filename: &'a str, length: i64, downloaded: bool, chunk: i32) -> Self {
+    fn new(filename: &'a str, length: i64, chunk: i32) -> Self {
         Self {
             filename,
             length,
-            downloaded,
             chunk,
         }
     }

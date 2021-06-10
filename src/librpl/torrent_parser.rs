@@ -8,20 +8,17 @@ use crate::librpl::error;
 use crate::librpl::RplChunk;
 use crate::librpl::RplFile;
 
-pub struct TorrentPack<'a> {
+pub struct TorrentPack {
     max_size_allow: i64,
     pub torrent: Torrent,
-    // TODO: Implement saving downloaded files to database?
-    downloaded_file: Option<HashMap<&'a PathBuf, RplFile<'a>>>,
     ignore_warning: bool,
 }
 
-impl<'a> TorrentPack<'a> {
+impl TorrentPack {
     pub fn new(torrent: Torrent, ignore_warning: bool) -> Self {
         Self {
             max_size_allow: 0,
             torrent,
-            downloaded_file: None,
             ignore_warning,
         }
     }
@@ -53,44 +50,28 @@ impl<'a> TorrentPack<'a> {
     }
 }
 
-impl<'a> RplChunk<'a> for TorrentPack<'a> {
+impl<'a> RplChunk<'a> for TorrentPack {
     fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplFile<'a>>, error::Error> {
         let file_vecs = match &self.torrent.files {
             Some(vecs) => vecs,
             None => return Err(error::Error::EmptyTorrent),
         };
 
-        let mut empty_hashmap = HashMap::new();
-        let downloaded = match &mut self.downloaded_file {
-            Some(vecs) => vecs,
-            None => &mut empty_hashmap,
-        };
-
-        let mut files_in_downloaded = downloaded.len();
         let files_in_pack = file_vecs.len();
 
         let mut chunks: HashMap<&PathBuf, RplFile> = HashMap::new();
         let mut current_chunk: i32 = 1;
 
-        while files_in_downloaded != files_in_pack {
-            let mut current_sum_size: i64 = 0;
-            for (index, file) in file_vecs.iter().enumerate() {
-                if downloaded.contains_key(&file.path) {
-                    continue;
-                } else {
-                    if file.length > self.max_size_allow {
-                        downloaded.insert(
-                            &file.path,
-                            RplFile::new(file.path.to_str().unwrap(), file.length, false, -1),
-                        );
+        let mut current_sum_size: i64 = 0;
+        for (index, file) in file_vecs.iter().enumerate() {
+            if file.length > self.max_size_allow {
+                chunks.insert(
+                    &file.path,
+                    RplFile::new(file.path.to_str().unwrap(), file.length, -1),
+                );
 
-                        chunks.insert(
-                            &file.path,
-                            RplFile::new(file.path.to_str().unwrap(), file.length, false, -1),
-                        );
-
-                        if self.ignore_warning {
-                            warn!(
+                if self.ignore_warning {
+                    warn!(
                             "File `{}` has size {} which is larger than maximum size allowed {}. This file will be skipped.",
                             file.path
                                 .to_str()
@@ -100,8 +81,8 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                                 .file_size(file_size_opts::BINARY)
                                 .unwrap()
                         );
-                        } else {
-                            error!(
+                } else {
+                    error!(
                             "File `{}` has size {} which is larger than maximum size allowed {}. If you want to ignore this file, rerun the program with -f/--force",
                             file.path
                                 .to_str()
@@ -111,106 +92,63 @@ impl<'a> RplChunk<'a> for TorrentPack<'a> {
                                 .file_size(file_size_opts::BINARY)
                                 .unwrap()
                         );
-                            return Err(error::Error::MaxSizeAllowedTooSmall);
-                        }
-                    // last file case
-                    } else if index + 1 == files_in_pack {
-                        downloaded.insert(
-                            &file.path,
-                            RplFile::new(&file.path.to_str().unwrap(), file.length, true, -1),
-                        );
-
-                        if current_sum_size + file.length > self.max_size_allow {
-                            chunks.insert(
-                                &file.path,
-                                RplFile::new(
-                                    &file.path.to_str().unwrap(),
-                                    file.length,
-                                    true,
-                                    current_chunk,
-                                ),
-                            );
-                            current_chunk += 1;
-                            current_sum_size = 0;
-                        }
-
-                        chunks.insert(
-                            &file.path,
-                            RplFile::new(
-                                &file.path.to_str().unwrap(),
-                                file.length,
-                                true,
-                                current_chunk,
-                            ),
-                        );
-                        debug!(
-                            "Added {} size {} index {} chunk {}",
-                            file.path.to_str().unwrap(),
-                            file.length,
-                            index,
-                            current_chunk,
-                        );
-                    } else if current_sum_size + file.length <= self.max_size_allow {
-                        debug!(
-                            "Added {} size {} index {} chunk {}",
-                            file.path.to_str().unwrap(),
-                            file.length,
-                            index,
-                            current_chunk,
-                        );
-                        downloaded.insert(
-                            &file.path,
-                            RplFile::new(&file.path.to_str().unwrap(), file.length, true, -1),
-                        );
-
-                        chunks.insert(
-                            &file.path,
-                            RplFile::new(
-                                &file.path.to_str().unwrap(),
-                                file.length,
-                                true,
-                                current_chunk,
-                            ),
-                        );
-                        current_sum_size += file.length;
-                    } else {
-                        chunks.insert(
-                            &file.path,
-                            RplFile::new(
-                                &file.path.to_str().unwrap(),
-                                file.length,
-                                true,
-                                current_chunk,
-                            ),
-                        );
-                        current_chunk += 1;
-                        current_sum_size = 0;
-                        debug!(
-                            "Added {} size {} index {} chunk {}",
-                            file.path.to_str().unwrap(),
-                            file.length,
-                            index,
-                            current_chunk,
-                        );
-                        downloaded.insert(
-                            &file.path,
-                            RplFile::new(&file.path.to_str().unwrap(), file.length, true, -1),
-                        );
-                        chunks.insert(
-                            &file.path,
-                            RplFile::new(
-                                &file.path.to_str().unwrap(),
-                                file.length,
-                                true,
-                                current_chunk,
-                            ),
-                        );
-
-                        current_sum_size += file.length;
-                    }
-
-                    files_in_downloaded = downloaded.len();
+                    return Err(error::Error::MaxSizeAllowedTooSmall);
                 }
+            // last file case
+            } else if index + 1 == files_in_pack {
+                if current_sum_size + file.length > self.max_size_allow {
+                    chunks.insert(
+                        &file.path,
+                        RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                    );
+                    current_chunk += 1;
+                    current_sum_size = 0;
+                }
+
+                chunks.insert(
+                    &file.path,
+                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                );
+                debug!(
+                    "Added {} size {} index {} chunk {}",
+                    file.path.to_str().unwrap(),
+                    file.length,
+                    index,
+                    current_chunk,
+                );
+            } else if current_sum_size + file.length <= self.max_size_allow {
+                debug!(
+                    "Added {} size {} index {} chunk {}",
+                    file.path.to_str().unwrap(),
+                    file.length,
+                    index,
+                    current_chunk,
+                );
+                chunks.insert(
+                    &file.path,
+                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                );
+                current_sum_size += file.length;
+            } else {
+                chunks.insert(
+                    &file.path,
+                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                );
+                current_chunk += 1;
+                current_sum_size = 0;
+                debug!(
+                    "Added {} size {} index {} chunk {}",
+                    file.path.to_str().unwrap(),
+                    file.length,
+                    index,
+                    current_chunk,
+                );
+                chunks.insert(
+                    &file.path,
+                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                );
+
+                current_sum_size += file.length;
             }
         }
 

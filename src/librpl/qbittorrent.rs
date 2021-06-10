@@ -407,7 +407,7 @@ impl QbitTorrent {
 }
 
 #[async_trait]
-impl<'a> RplLeech<'a, TorrentPack<'a>, QbitTorrent, QbitConfig> for TorrentPack<'a> {
+impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
     async fn leech_torrent(
         &'a mut self,
         torrent: Torrent,
