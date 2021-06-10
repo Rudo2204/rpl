@@ -97,12 +97,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
             // last file case
             } else if index + 1 == files_in_pack {
                 if current_sum_size + file.length > self.max_size_allow {
-                    chunks.insert(
-                        &file.path,
-                        RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
-                    );
                     current_chunk += 1;
-                    current_sum_size = 0;
                 }
 
                 chunks.insert(
@@ -130,12 +125,9 @@ impl<'a> RplChunk<'a> for TorrentPack {
                 );
                 current_sum_size += file.length;
             } else {
-                chunks.insert(
-                    &file.path,
-                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
-                );
                 current_chunk += 1;
                 current_sum_size = 0;
+                current_sum_size += file.length;
                 debug!(
                     "Added {} size {} index {} chunk {}",
                     file.path.to_str().unwrap(),
@@ -147,8 +139,6 @@ impl<'a> RplChunk<'a> for TorrentPack {
                     &file.path,
                     RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
                 );
-
-                current_sum_size += file.length;
             }
         }
 
