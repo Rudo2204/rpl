@@ -7,7 +7,7 @@ use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
 use lava_torrent::torrent::v1::Torrent;
-use log::{debug, error, LevelFilter};
+use log::{debug, error, warn, LevelFilter};
 use parse_size::parse_size;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -235,6 +235,10 @@ fn write_default_config(config_path: &Path) {
         .unwrap();
     writeln!(file, "{}", STOCK_CONFIG)
         .expect("Could not write config to file, maybe there is a permission error?");
+    warn!(
+        "No config found, so I have created one at {}. Edit this file and run rpl again.",
+        config_path.display()
+    )
 }
 
 impl Config {
