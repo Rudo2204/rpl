@@ -161,8 +161,6 @@ struct RplConfig {
     save_path: String,
     remote_path: String,
     ignore_warning: bool,
-    seed: bool,
-    seed_path: String,
 }
 
 struct RplRunningConfig {
@@ -268,7 +266,7 @@ impl Config {
     }
 
     fn seed_path_invalid(&self) -> Result<bool, error::Error> {
-        let seed_path = &self.rpl.seed_path;
+        let seed_path = &self.seed_settings.seed_path();
         if seed_path.is_empty() {
             Ok(true)
         } else {
