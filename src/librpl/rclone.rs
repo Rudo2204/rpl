@@ -131,7 +131,7 @@ impl RcloneClient {
             .arg("--use-json-log")
             .arg("--transfers")
             .arg(self.transfers.to_string())
-            .arg("--drive_chunk_size")
+            .arg("--drive-chunk-size")
             .arg(self.drive_chunk_size.to_string())
             .arg(&self.source.to_str().unwrap())
             // TODO: check this dst to make it safe
