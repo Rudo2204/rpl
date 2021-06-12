@@ -40,4 +40,6 @@ pub enum Error {
     MountPathNotExist,
     #[error("Config error: Unsupported rclone variant (only rclone/fclone/gclone is supported)")]
     UnsupportedRcloneVariant,
+    #[error("Config error: Invalid input")]
+    RplInvalidInput,
 }

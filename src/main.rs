@@ -61,7 +61,7 @@ address = "http://localhost:8080"
 transfers = 8
 # default drive chunk size (unit is MiB)
 # Note: with default rpl's setting (transfers = 8, drive_chunk_size = 64M)
-# rclone will consume 8*64 = 512 MiB when uploading
+# rclone will consume 8*64 = 512 MiB of RAM when uploading
 drive_chunk_size = 64"#;
 
 fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<Option<&str>> {
@@ -227,7 +227,8 @@ impl RplRcloneConfig {
     }
 }
 
-fn write_default_config(config_path: &Path) {
+// should always return error!
+fn write_default_config(config_path: &Path) -> Result<(), error::Error> {
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -238,7 +239,8 @@ fn write_default_config(config_path: &Path) {
     warn!(
         "No config found, so I have created one at {}. Edit this file and run rpl again.",
         config_path.display()
-    )
+    );
+    Err(error::Error::InvalidRplConfig)
 }
 
 impl Config {
@@ -313,7 +315,7 @@ fn get_rpl_config() -> Result<Config, error::Error> {
     let config: Config;
     if !conf_file.exists() {
         util::create_proj_conf("", "", PROGRAM_NAME).unwrap();
-        write_default_config(&conf_file);
+        write_default_config(&conf_file)?;
     }
 
     let s = fs::read_to_string(&conf_file).unwrap();
@@ -503,6 +505,44 @@ fn get_rclone_config(
     Ok(config)
 }
 
+async fn parse_input(matches: &ArgMatches<'_>) -> Result<Vec<u8>, error::Error> {
+    let input = matches.value_of("input").unwrap();
+
+    if input.contains("magnet") {
+        debug!("User inputted a magnet link, will now download the torrent file first");
+        let client = reqwest::Client::new();
+        let form = reqwest::multipart::Form::new().text("magnet", input.to_string());
+        let torrent_resp = client
+            .post("http://magnet2torrent.com/upload/")
+            .multipart(form)
+            .send()
+            .await?;
+
+        let torrent_location = torrent_resp.url();
+
+        debug!("The torrent file location is {}", torrent_location);
+
+        let response = reqwest::get(torrent_location.as_str())
+            .await?
+            .bytes()
+            .await?;
+        return Ok(response.to_vec());
+    } else {
+        let tmp = shellexpand::full(input)
+            .expect("Could not look up a variable in input")
+            .into_owned();
+
+        if Path::new(&tmp).exists() {
+            let mut torrent_file = File::open(tmp).unwrap();
+            let mut raw_torrent = Vec::new();
+            torrent_file.read_to_end(&mut raw_torrent)?;
+            return Ok(raw_torrent);
+        }
+    }
+
+    Err(error::Error::RplInvalidInput)
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let matches = App::new(PROGRAM_NAME)
@@ -511,8 +551,8 @@ async fn main() -> Result<()> {
         .author(crate_authors!())
         .about(crate_description!())
         .arg(
-            Arg::with_name("file")
-                .help("The input torrent file")
+            Arg::with_name("input")
+                .help("Input torrent or magnet")
                 .index(1)
                 .takes_value(true)
                 .required(true),
@@ -667,10 +707,7 @@ async fn main() -> Result<()> {
     let config = get_running_config(&file_config, &matches)?;
     let qbconfig = get_qb_config(&file_config, &matches)?;
     let rcloneconfig = get_rclone_config(&file_config, &matches)?;
-
-    let mut torrent_file = File::open(&matches.value_of("file").unwrap())?;
-    let mut raw_torrent = Vec::new();
-    torrent_file.read_to_end(&mut raw_torrent)?;
+    let raw_torrent = parse_input(&matches).await?;
 
     let mut pack_config = TorrentPack::new(
         Torrent::read_from_bytes(&raw_torrent).unwrap(),
