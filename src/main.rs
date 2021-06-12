@@ -58,7 +58,11 @@ address = "http://localhost:8080"
 
 [rclone]
 # default transfers of rclone
-transfers = 4"#;
+transfers = 8
+# default drive chunk size (unit is MiB)
+# Note: with default rpl's setting (transfers = 8, drive_chunk_size = 64M)
+# rclone will consume 8*64 = 512 MiB when uploading
+drive_chunk_size = 64"#;
 
 fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<Option<&str>> {
     let colors_line = ColoredLevelConfig::new()
@@ -211,6 +215,16 @@ impl RplQbitConfig {
 #[derive(Serialize, Deserialize, Getters)]
 struct RplRcloneConfig {
     transfers: u16,
+    drive_chunk_size: u16,
+}
+
+impl RplRcloneConfig {
+    fn new(transfers: u16, drive_chunk_size: u16) -> Self {
+        Self {
+            transfers,
+            drive_chunk_size,
+        }
+    }
 }
 
 fn write_default_config(config_path: &Path) {
@@ -465,6 +479,26 @@ fn get_qb_config(
     Ok(config)
 }
 
+fn get_rclone_config(
+    file_config: &Config,
+    matches: &ArgMatches,
+) -> Result<RplRcloneConfig, error::Error> {
+    let transfers: u16 = if let Some(val) = matches.value_of("rclone_transfers") {
+        val.parse().unwrap()
+    } else {
+        file_config.rclone.transfers
+    };
+
+    let drive_chunk_size: u16 = if let Some(val) = matches.value_of("rclone_drive_chunk_size") {
+        val.parse().unwrap()
+    } else {
+        file_config.rclone.drive_chunk_size
+    };
+
+    let config = RplRcloneConfig::new(transfers, drive_chunk_size);
+    Ok(config)
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let matches = App::new(PROGRAM_NAME)
@@ -495,6 +529,7 @@ async fn main() -> Result<()> {
         .arg(
             Arg::with_name("max_size_percentage")
                 .long("percentage")
+                .value_name("VALUE")
                 .takes_value(true)
                 .conflicts_with("max_size")
                 .help("Set percentage of free available disk space allowed for rpl"),
@@ -503,18 +538,21 @@ async fn main() -> Result<()> {
             Arg::with_name("max_size")
                 .short("s")
                 .long("size")
+                .value_name("VALUE")
                 .takes_value(true)
                 .help("Set disk space allowed for rpl"),
         )
         .arg(
             Arg::with_name("torrent_client")
                 .long("torrent-client")
+                .value_name("CLIENT")
                 .takes_value(true)
                 .help("Set the torrent client"),
         )
         .arg(
             Arg::with_name("upload_client")
                 .long("upload-client")
+                .value_name("CLIENT")
                 .takes_value(true)
                 .help("Set the upload client"),
         )
@@ -522,6 +560,7 @@ async fn main() -> Result<()> {
             Arg::with_name("save_path")
                 .short("p")
                 .long("save-path")
+                .value_name("PATH")
                 .takes_value(true)
                 .help("Set the save path"),
         )
@@ -529,6 +568,7 @@ async fn main() -> Result<()> {
             Arg::with_name("remote_path")
                 .short("r")
                 .long("remote-path")
+                .value_name("PATH")
                 .takes_value(true)
                 .help("Set the remote path"),
         )
@@ -546,29 +586,34 @@ async fn main() -> Result<()> {
         .arg(
             Arg::with_name("seed_path")
                 .long("seed-path")
+                .value_name("PATH")
                 .help("Set the rclone's mount path used for seeding"),
         )
         .arg(
             Arg::with_name("skip")
                 .long("skip")
+                .value_name("VALUE")
                 .takes_value(true)
                 .help("Skip number of chunks (in case of rpl unexpectedly crashes)"),
         )
         .arg(
             Arg::with_name("qbittorrent_username")
                 .long("qbu")
+                .value_name("USERNAME")
                 .takes_value(true)
                 .help("Set the username of qBittorrent Web UI"),
         )
         .arg(
             Arg::with_name("qbittorrent_password")
                 .long("qbp")
+                .value_name("PASSWORD")
                 .takes_value(true)
                 .help("Set the password of qBittorrent Web UI"),
         )
         .arg(
             Arg::with_name("qbittorrent_address")
                 .long("qba")
+                .value_name("ADDRESS")
                 .takes_value(true)
                 .help("Set the address of qBittorrent Web UI"),
         )
@@ -576,8 +621,16 @@ async fn main() -> Result<()> {
             Arg::with_name("rclone_transfers")
                 .short("t")
                 .long("transfers")
+                .value_name("TRANSFERS")
                 .takes_value(true)
                 .help("Configure the number of transfers"),
+        )
+        .arg(
+            Arg::with_name("rclone_drive_chunk_size")
+                .long("drive-chunk-size")
+                .value_name("SIZE")
+                .takes_value(true)
+                .help("Configure the drive chunk size value (in MiB)"),
         )
         .get_matches();
 
@@ -609,12 +662,7 @@ async fn main() -> Result<()> {
 
     let config = get_running_config(&file_config, &matches)?;
     let qbconfig = get_qb_config(&file_config, &matches)?;
-
-    let transfers: u16 = if let Some(trans) = matches.value_of("rclone_transfers") {
-        trans.parse().unwrap()
-    } else {
-        file_config.rclone.transfers
-    };
+    let rcloneconfig = get_rclone_config(&file_config, &matches)?;
 
     let mut torrent_file = File::open(&matches.value_of("file").unwrap())?;
     let mut raw_torrent = Vec::new();
@@ -642,7 +690,8 @@ async fn main() -> Result<()> {
         config.upload_client,
         PathBuf::from(shellexpand::full(&config.save_path).unwrap().into_owned()),
         config.remote_path,
-        transfers,
+        rcloneconfig.transfers,
+        rcloneconfig.drive_chunk_size,
     );
 
     pack_config

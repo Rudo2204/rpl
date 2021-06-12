@@ -67,6 +67,7 @@ pub struct RcloneClient {
     source: PathBuf,
     destination: String,
     transfers: u16,
+    drive_chunk_size: u16,
 }
 
 impl RplUpload for Job {
@@ -102,12 +103,19 @@ impl RplUpload for Job {
 }
 
 impl RcloneClient {
-    pub fn new(variant: String, source: PathBuf, destination: String, transfers: u16) -> Self {
+    pub fn new(
+        variant: String,
+        source: PathBuf,
+        destination: String,
+        transfers: u16,
+        drive_chunk_size: u16,
+    ) -> Self {
         Self {
             variant,
             source,
             destination,
             transfers,
+            drive_chunk_size,
         }
     }
 
@@ -123,7 +131,8 @@ impl RcloneClient {
             .arg("--use-json-log")
             .arg("--transfers")
             .arg(self.transfers.to_string())
-            // TODO: check this unwrap to make it safe
+            .arg("--drive_chunk_size")
+            .arg(self.drive_chunk_size.to_string())
             .arg(&self.source.to_str().unwrap())
             // TODO: check this dst to make it safe
             .arg(&self.destination)
@@ -141,25 +150,6 @@ impl RcloneClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // rather expensive upload test with hardcoded values
-    // only run manually in development
-    #[test]
-    #[ignore]
-    fn upload() {
-        let rclone_client = RcloneClient::new(
-            String::from("rclone"),
-            PathBuf::from(
-                shellexpand::full("~/rclone uploadme")
-                    .expect("Could not find the correct path to saved data")
-                    .into_owned(),
-            ),
-            String::from("gdrive:/rpl_test"),
-            4,
-        );
-
-        rclone_client.upload(76043928).unwrap();
-    }
 
     #[test]
     fn deser() {
