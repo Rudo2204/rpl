@@ -484,10 +484,10 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
                 None => (),
             }
             info!("Downloading chunk {}/{}", job.chunk, no_jobs);
-            job.download(&torrent_client, &hash).await?;
+            job.download(&torrent_client, &hash, no_jobs).await?;
             info!("Finished downloading chunk {}/{}", job.chunk, no_jobs);
             info!("Uploading chunk {}/{}", job.chunk, no_jobs);
-            job.upload(&upload_client)?;
+            job.upload(&upload_client, no_jobs)?;
             info!("Finished uploading chunk {}/{}", job.chunk, no_jobs);
 
             torrent_client.delete_torrent(&hash, true).await?;
@@ -517,7 +517,12 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
 #[async_trait]
 trait RplQbit {
     fn disable_others(&self, offset: i32, no_all_files: i32) -> Option<String>;
-    async fn download(&self, client: &QbitConfig, hash: &str) -> Result<(), error::Error>;
+    async fn download(
+        &self,
+        client: &QbitConfig,
+        hash: &str,
+        no_jobs: usize,
+    ) -> Result<(), error::Error>;
 }
 
 #[async_trait]
@@ -536,7 +541,12 @@ impl RplQbit for Job {
         }
     }
 
-    async fn download(&self, client: &QbitConfig, hash: &str) -> Result<(), error::Error> {
+    async fn download(
+        &self,
+        client: &QbitConfig,
+        hash: &str,
+        no_jobs: usize,
+    ) -> Result<(), error::Error> {
         client.resume_torrent(hash).await?;
         let size = self.total_size as u64;
 
@@ -552,15 +562,21 @@ impl RplQbit for Job {
             let state = current_info.state();
             match state {
                 State::Moving => {
-                    pb.set_message(format!("Moving files of chunk {}", self.chunk));
+                    pb.set_message(format!("Moving files of chunk {}/{}", self.chunk, no_jobs));
                     sleep(Duration::from_millis(1000)).await;
                 }
                 State::Allocating => {
-                    pb.set_message(format!("Allocating data of chunk {}", self.chunk));
+                    pb.set_message(format!(
+                        "Allocating data of chunk {}/{}",
+                        self.chunk, no_jobs
+                    ));
                     sleep(Duration::from_millis(1000)).await;
                 }
                 State::MetaDL => {
-                    pb.set_message(format!("Downloading metadata of chunk {}", self.chunk));
+                    pb.set_message(format!(
+                        "Downloading metadata of chunk {}/{}",
+                        self.chunk, no_jobs
+                    ));
                     sleep(Duration::from_millis(1000)).await;
                 }
                 State::PausedDL => {
@@ -586,23 +602,35 @@ impl RplQbit for Job {
                     return Err(error::Error::QbitTorrentErrored);
                 }
                 State::Downloading => {
-                    pb.set_message(format!("Downloading chunk {}", self.chunk));
+                    pb.set_message(format!("Downloading chunk {}/{}", self.chunk, no_jobs));
                     pb.set_position(size - current_info.amount_left);
                 }
                 State::StalledDL => {
-                    pb.set_message(format!("[Stalled] Downloading chunk {}", self.chunk));
+                    pb.set_message(format!(
+                        "[Stalled] Downloading chunk {}/{}",
+                        self.chunk, no_jobs
+                    ));
                     pb.set_position(size - current_info.amount_left);
                 }
                 State::QueuedDL => {
-                    pb.set_message(format!("[Queued] Downloading chunk {}", self.chunk));
+                    pb.set_message(format!(
+                        "[Queued] Downloading chunk {}/{}",
+                        self.chunk, no_jobs
+                    ));
                     pb.set_position(size - current_info.amount_left);
                 }
                 State::ForceDL => {
-                    pb.set_message(format!("[Forced] Downloading chunk {}", self.chunk));
+                    pb.set_message(format!(
+                        "[Forced] Downloading chunk {}/{}",
+                        self.chunk, no_jobs
+                    ));
                     pb.set_position(size - current_info.amount_left);
                 }
                 State::CheckingDL => {
-                    pb.set_message(format!("[Checking] Downloading chunk {}", self.chunk));
+                    pb.set_message(format!(
+                        "[Checking] Downloading chunk {}/{}",
+                        self.chunk, no_jobs
+                    ));
                     pb.set_position(size - current_info.amount_left);
                 }
                 State::PausedUP

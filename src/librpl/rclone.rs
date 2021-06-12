@@ -71,7 +71,7 @@ pub struct RcloneClient {
 }
 
 impl RplUpload for Job {
-    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error> {
+    fn upload(&self, client: &RcloneClient, no_jobs: usize) -> Result<(), error::Error> {
         let stderr = client.build_stderr_capture()?;
         let reader = BufReader::new(stderr);
 
@@ -93,7 +93,7 @@ impl RplUpload for Job {
             .for_each(|line| {
                 let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
                 if let Some(_eta) = resp.stats.eta {
-                    pb.set_message(format!("Uploading chunk {}", self.chunk));
+                    pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
                     pb.set_position(resp.stats.bytes);
                 }
             });

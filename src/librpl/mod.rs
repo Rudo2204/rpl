@@ -134,7 +134,7 @@ pub fn build_queue(datamap: HashMap<&PathBuf, RplFile<'_>>, torrent: Torrent) ->
 }
 
 pub trait RplUpload {
-    fn upload(&self, client: &RcloneClient) -> Result<(), error::Error>;
+    fn upload(&self, client: &RcloneClient, no_jobs: usize) -> Result<(), error::Error>;
 }
 
 #[derive(Serialize, Deserialize, Getters)]
