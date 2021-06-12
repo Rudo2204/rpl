@@ -63,7 +63,7 @@ struct RcloneTransferring {
 
 #[derive(Debug)]
 pub struct RcloneClient {
-    variant: String,
+    pub variant: String,
     source: PathBuf,
     destination: String,
     transfers: u16,

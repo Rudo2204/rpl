@@ -5,9 +5,11 @@ pub mod torrent_parser;
 pub mod util;
 
 use async_trait::async_trait;
+use derive_getters::Getters;
 use humansize::{file_size_opts, FileSize};
 use lava_torrent::torrent::v1::Torrent;
 use log::info;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -83,8 +85,7 @@ where
         config: P,
         torrent_client: C,
         upload_client: RcloneClient,
-        seed: bool,
-        seed_path: &'a str,
+        seed: SeedSettings,
         skip: u32,
     ) -> Result<(), error::Error>;
 }
@@ -134,4 +135,31 @@ pub fn build_queue(datamap: HashMap<&PathBuf, RplFile<'_>>, torrent: Torrent) ->
 
 pub trait RplUpload {
     fn upload(&self, client: &RcloneClient) -> Result<(), error::Error>;
+}
+
+#[derive(Serialize, Deserialize, Getters)]
+pub struct SeedSettings {
+    seed_enable: bool,
+    seed_path: String,
+    seed_wait: u32,
+}
+
+impl Default for SeedSettings {
+    fn default() -> Self {
+        Self {
+            seed_enable: false,
+            seed_path: String::from(""),
+            seed_wait: 0,
+        }
+    }
+}
+
+impl SeedSettings {
+    pub fn new(seed_enable: bool, seed_path: String, seed_wait: u32) -> Self {
+        Self {
+            seed_enable,
+            seed_path,
+            seed_wait,
+        }
+    }
 }

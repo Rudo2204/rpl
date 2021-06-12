@@ -21,7 +21,7 @@ use librpl::error;
 use librpl::qbittorrent::{QbitConfig, QbitTorrent};
 use librpl::rclone::RcloneClient;
 use librpl::torrent_parser::TorrentPack;
-use librpl::RplLeech;
+use librpl::{RplLeech, SeedSettings};
 
 pub const PROGRAM_NAME: &str = "rpl";
 const STOCK_CONFIG: &str = r#"[rpl]
@@ -42,11 +42,16 @@ save_path = ""
 remote_path = ""
 # Skip files that have size larger than max_size
 ignore_warning = false
+
+[seed_settings]
 # set to true to seed the torrent through rclone's mount after rpl finishes
-seed = false
+seed_enable = false
 # set the rclone's mount path (remote mount path should be the same as remote_path)
-# Example: `rclone mount nugu:/rpl ~/mount` then seed_path should be `~/mount`
+# Example: `rclone mount ... nugu:/rpl ~/mount` then seed_path should be `~/mount`
 seed_path = ""
+# number of seconds to wait for rclone's mount to refresh the mount point
+# should be at least equal or bigger than the value of --poll-interval
+seed_wait = 20
 
 [qbittorrent]
 # default username of qbittorrent Web UI
@@ -143,6 +148,7 @@ fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<
 struct Config {
     rpl: RplConfig,
     qbittorrent: RplQbitConfig,
+    seed_settings: SeedSettings,
     rclone: RplRcloneConfig,
 }
 
@@ -166,8 +172,6 @@ struct RplRunningConfig {
     save_path: String,
     remote_path: String,
     ignore_warning: bool,
-    seed: bool,
-    seed_path: String,
 }
 
 impl RplRunningConfig {
@@ -178,8 +182,6 @@ impl RplRunningConfig {
         save_path: String,
         remote_path: String,
         ignore_warning: bool,
-        seed: bool,
-        seed_path: String,
     ) -> Self {
         Self {
             max_size,
@@ -188,8 +190,6 @@ impl RplRunningConfig {
             save_path,
             remote_path,
             ignore_warning,
-            seed,
-            seed_path,
         }
     }
 }
@@ -414,32 +414,6 @@ fn get_running_config(
         file_config.rpl.ignore_warning
     };
 
-    let seed: bool = if matches.is_present("seed") {
-        true
-    } else {
-        file_config.rpl.seed
-    };
-
-    let mut seed_path = String::new();
-    if seed {
-        seed_path = if let Some(p) = matches.value_of("seed_path") {
-            let path = PathBuf::from(shellexpand::full(p).unwrap().into_owned());
-            match path.exists() {
-                true => {
-                    return Err(error::Error::MountPathNotExist);
-                }
-                false => String::from(path.to_str().unwrap()),
-            }
-        } else {
-            match &file_config.seed_path_invalid()? {
-                true => {
-                    return Err(error::Error::MountPathNotExist);
-                }
-                false => String::from(&file_config.rpl.seed_path),
-            }
-        };
-    }
-
     let running_config = RplRunningConfig::new(
         max_size_allow,
         //String::from(torrent_client),
@@ -447,8 +421,6 @@ fn get_running_config(
         save_path,
         String::from(remote_path),
         ignore_warning,
-        seed,
-        seed_path,
     );
 
     Ok(running_config)
@@ -543,6 +515,51 @@ async fn parse_input(matches: &ArgMatches<'_>) -> Result<Vec<u8>, error::Error> 
     Err(error::Error::RplInvalidInput)
 }
 
+fn get_seed_config(
+    file_config: &Config,
+    matches: &ArgMatches,
+) -> Result<SeedSettings, error::Error> {
+    let seed: bool = if matches.is_present("seed_enable") {
+        true
+    } else {
+        *file_config.seed_settings.seed_enable()
+    };
+
+    if !seed {
+        return Ok(SeedSettings::default());
+    }
+
+    let mut seed_path = String::new();
+    if seed {
+        seed_path = if let Some(p) = matches.value_of("seed_path") {
+            let path = PathBuf::from(shellexpand::full(p).unwrap().into_owned());
+            match path.exists() {
+                true => {
+                    return Err(error::Error::MountPathNotExist);
+                }
+                false => String::from(path.to_str().unwrap()),
+            }
+        } else {
+            match &file_config.seed_path_invalid()? {
+                true => {
+                    return Err(error::Error::MountPathNotExist);
+                }
+                false => String::from(file_config.seed_settings.seed_path()),
+            }
+        };
+    }
+
+    let seed_wait: u32 = if let Some(val) = matches.value_of("seed_wait") {
+        val.parse().unwrap()
+    } else {
+        *file_config.seed_settings.seed_wait()
+    };
+
+    let config = SeedSettings::new(seed, seed_path, seed_wait);
+
+    Ok(config)
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let matches = App::new(PROGRAM_NAME)
@@ -623,7 +640,7 @@ async fn main() -> Result<()> {
                 .help("Force rpl to ignore warning"),
         )
         .arg(
-            Arg::with_name("seed")
+            Arg::with_name("seed_enable")
                 .long("seed")
                 .help("Seed the torrent after rpl finishes leeching"),
         )
@@ -632,6 +649,12 @@ async fn main() -> Result<()> {
                 .long("seed-path")
                 .value_name("PATH")
                 .help("Set the rclone's mount path used for seeding"),
+        )
+        .arg(
+            Arg::with_name("seed_wait")
+                .long("seed-wait")
+                .value_name("VALUE")
+                .help("Set the wait time for rclone's mount to refresh (in seconds)"),
         )
         .arg(
             Arg::with_name("skip")
@@ -706,7 +729,8 @@ async fn main() -> Result<()> {
 
     let config = get_running_config(&file_config, &matches)?;
     let qbconfig = get_qb_config(&file_config, &matches)?;
-    let rcloneconfig = get_rclone_config(&file_config, &matches)?;
+    let rclone_config = get_rclone_config(&file_config, &matches)?;
+    let seed_config = get_seed_config(&file_config, &matches)?;
     let raw_torrent = parse_input(&matches).await?;
 
     let mut pack_config = TorrentPack::new(
@@ -719,7 +743,6 @@ async fn main() -> Result<()> {
 
     let torrent_config = QbitTorrent::default()
         .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
-        .skip_hash_checking(true)
         .paused(true)
         .save_path(PathBuf::from(
             shellexpand::full(&config.save_path)
@@ -731,8 +754,8 @@ async fn main() -> Result<()> {
         config.upload_client,
         PathBuf::from(shellexpand::full(&config.save_path).unwrap().into_owned()),
         config.remote_path,
-        rcloneconfig.transfers,
-        rcloneconfig.drive_chunk_size,
+        rclone_config.transfers,
+        rclone_config.drive_chunk_size,
     );
 
     pack_config
@@ -741,8 +764,7 @@ async fn main() -> Result<()> {
             torrent_config,
             qbit,
             upload_client,
-            config.seed,
-            &config.seed_path,
+            seed_config,
             skip,
         )
         .await?;

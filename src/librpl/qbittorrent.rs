@@ -11,8 +11,9 @@ use tokio::time::{sleep, Duration};
 
 use crate::librpl::rclone::RcloneClient;
 use crate::librpl::torrent_parser::TorrentPack;
-use crate::librpl::RplUpload;
+use crate::librpl::util;
 use crate::librpl::{build_queue, error, Job, RplChunk, RplClient, RplLeech, RplPackConfig};
+use crate::librpl::{RplUpload, SeedSettings};
 
 #[derive(Deserialize, Serialize)]
 enum TorrentFilter {
@@ -438,8 +439,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         config: QbitTorrent,
         torrent_client: QbitConfig,
         upload_client: RcloneClient,
-        seed: bool,
-        seed_path: &'a str,
+        seed: SeedSettings,
         skip: u32,
     ) -> Result<(), error::Error> {
         let hash = self.info_hash();
@@ -495,10 +495,15 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
             offset += job.no_files;
         }
 
-        if seed {
+        if *seed.seed_enable() {
+            info!(
+                "Waiting for {} to refresh mount point...",
+                upload_client.variant
+            );
+            util::wait_with_progress(*seed.seed_wait()).await;
             info!("Adding the torrent back to qbittorrent for seeding through rclone's mount");
-            let seed_config = config.save_path(PathBuf::from(
-                shellexpand::full(seed_path).unwrap().into_owned(),
+            let seed_config = config.skip_hash_checking(true).save_path(PathBuf::from(
+                shellexpand::full(seed.seed_path()).unwrap().into_owned(),
             ));
             torrent_client.add_new_torrent(seed_config).await?;
             torrent_client.set_share_limit(&hash).await?;
