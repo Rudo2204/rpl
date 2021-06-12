@@ -21,15 +21,15 @@ struct RcloneCopyResp {
 
 #[derive(Debug, Deserialize)]
 struct RcloneStatsResp {
-    pub bytes: u64,
+    bytes: u64,
     checks: u32,
     #[serde(rename = "deletedDirs")]
-    deleted_dirs: u32,
+    deleted_dirs: Option<u32>,
     deletes: u32,
     #[serde(rename = "elapsedTime")]
     elapsed_time: f32,
     errors: u32,
-    pub eta: Option<u64>,
+    eta: Option<u64>,
     #[serde(rename = "fatalError")]
     fatal_error: bool,
     renames: u32,
@@ -37,13 +37,13 @@ struct RcloneStatsResp {
     retry_error: bool,
     speed: f32,
     #[serde(rename = "totalBytes")]
-    total_bytes: u64,
+    total_bytes: Option<u64>,
     #[serde(rename = "totalChecks")]
-    total_checks: u32,
+    total_checks: Option<u32>,
     #[serde(rename = "totalTransfers")]
-    total_transfers: u64,
+    total_transfers: Option<u64>,
     #[serde(rename = "transferTime")]
-    transfer_time: f32,
+    transfer_time: Option<f32>,
     transferring: Option<Vec<RcloneTransferring>>,
     transfers: u32,
 }
@@ -92,7 +92,7 @@ impl RplUpload for Job {
             .filter(|line| line.contains("ETA"))
             .for_each(|line| {
                 let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
-                if let Some(_eta) = resp.stats.eta {
+                if resp.stats.speed > 0f32 {
                     pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
                     pb.set_position(resp.stats.bytes);
                 }
@@ -185,6 +185,24 @@ mod tests {
         match finished_json.find("ETA") {
             Some(_pos) => {
                 let _resp: RcloneCopyResp = serde_json::from_str(finished_json).unwrap();
+            }
+            None => (),
+        }
+
+        let gclone_json = r#"{"level":"info","msg":"\nTransferred:   \t         0 / 26.353 MBytes, 0%, 0 Bytes/s, ETA -\nTransferred:            0 / 6, 0%, 0.00 Files/s\nElapsed time:         1.4s\nTransferring:\n * MP3-daily-2021-June-11…-keep_looking_down.mp3:  0% /8.424M, 0/s, -\n * MP3-daily-2021-June-11…king_down-web-2021.m3u:  0% /96, 0/s, -\n * MP3-daily-2021-June-11…king_down-web-2021.nfo:  0% /813, 0/s, -\n * MP3-daily-2021-June-11…own-web-2021-cover.jpg:  0% /1.567M, 0/s, -\n\n","source":"accounting/stats.go:388","stats":{"bytes":0,"checks":0,"deletes":0,"elapsedTime":1.479027341,"errors":0,"fatalError":false,"renames":0,"retryError":false,"speed":0,"transferring":[{"bytes":0,"eta":null,"group":"global_stats","name":"MP3-daily-2021-June-11-Synthpop/Ritual_Veil-Keep_Looking_Down-WEB-2021-AMOK/00-ritual_veil-keep_looking_down-web-2021-cover.jpg","percentage":0,"size":1643197,"speed":0,"speedAvg":0},{"bytes":0,"eta":null,"group":"global_stats","name":"MP3-daily-2021-June-11-Synthpop/Ritual_Veil-Keep_Looking_Down-WEB-2021-AMOK/00-ritual_veil-keep_looking_down-web-2021.m3u","percentage":0,"size":96,"speed":0,"speedAvg":0},{"bytes":0,"eta":null,"group":"global_stats","name":"MP3-daily-2021-June-11-Synthpop/Ritual_Veil-Keep_Looking_Down-WEB-2021-AMOK/00-ritual_veil-keep_looking_down-web-2021.nfo","percentage":0,"size":813,"speed":0,"speedAvg":0},{"bytes":0,"eta":null,"group":"global_stats","name":"MP3-daily-2021-June-11-Synthpop/Ritual_Veil-Keep_Looking_Down-WEB-2021-AMOK/01-ritual_veil-keep_looking_down.mp3","percentage":0,"size":8833095,"speed":0,"speedAvg":0}],"transfers":0},"time":"2021-06-13T01:00:52.115318+07:00"}"#;
+
+        match gclone_json.find("ETA") {
+            Some(_pos) => {
+                let _resp: RcloneCopyResp = serde_json::from_str(gclone_json).unwrap();
+            }
+            None => (),
+        }
+
+        let gclone_finish = r#"{"level":"info","msg":"\nTransferred:   \t   26.353M / 26.353 MBytes, 100%, 3.640 MBytes/s, ETA 0s\nTransferred:            6 / 6, 100%, 0.83 Files/s\nElapsed time:         7.2s\n\n","source":"accounting/stats.go:388","stats":{"bytes":27633266,"checks":0,"deletes":0,"elapsedTime":7.240487058,"errors":0,"fatalError":false,"renames":0,"retryError":false,"speed":3816492.69982025,"transfers":6},"time":"2021-06-13T01:00:57.876773+07:00"}"#;
+
+        match gclone_finish.find("ETA") {
+            Some(_pos) => {
+                let _resp: RcloneCopyResp = serde_json::from_str(gclone_finish).unwrap();
             }
             None => (),
         }
