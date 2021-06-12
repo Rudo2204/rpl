@@ -201,11 +201,17 @@ impl QbitConfig {
         let res = self
             .client
             .get(&format!("{}/api/v2/app/version", self.address))
+            .headers(self.make_headers()?)
             .send()
-            .await?
-            .text()
             .await?;
-        Ok(res)
+
+        match res.error_for_status_ref() {
+            Ok(_) => {
+                let version = res.text().await?;
+                Ok(version)
+            }
+            Err(e) => Err(error::Error::from(e)),
+        }
     }
 
     fn make_headers(&self) -> Result<reqwest::header::HeaderMap, error::Error> {
