@@ -3,7 +3,7 @@ use derive_builder::Builder;
 use derive_getters::Getters;
 use indicatif::{ProgressBar, ProgressStyle};
 use lava_torrent::torrent::v1::Torrent;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -300,8 +300,8 @@ impl QbitConfig {
 
         match res.error_for_status() {
             Ok(_) => {
-                debug!("Sleeping 500ms for qbittorrent to delete the torrent...");
-                sleep(Duration::from_millis(500)).await;
+                debug!("Sleeping 3s for qbittorrent to delete the torrent...");
+                sleep(Duration::from_millis(3000)).await;
                 Ok(())
             }
             Err(e) => Err(error::Error::from(e)),
@@ -568,6 +568,7 @@ impl RplQbit for Job {
         hash: &str,
         no_jobs: usize,
     ) -> Result<(), error::Error> {
+        let mut retry = 1;
         client.resume_torrent(hash).await?;
         let size = self.total_size;
 
@@ -604,6 +605,8 @@ impl RplQbit for Job {
                     debug!("qBittorrent entered PausedDL state (maybe qBittorrent has not resumed the torrent yet). Will now wait 5s and try again...");
                     sleep(Duration::from_millis(5000)).await;
 
+                    client.resume_torrent(hash).await?;
+
                     let retry_current_info = client.get_torrent_info(hash).await?;
                     let retry_state = retry_current_info.state();
                     match retry_state {
@@ -615,12 +618,32 @@ impl RplQbit for Job {
                     }
                 }
                 State::Error => {
-                    error!("qBittorrent entered Error state!");
-                    return Err(error::Error::QbitTorrentErrored);
+                    if retry <= 3 {
+                        warn!("qBittorrent entered Error state! Waiting 5s before retrying...");
+                        sleep(Duration::from_millis(5000)).await;
+                        info!("Retrying {}/3 times", retry);
+                        retry += 1;
+                        client.resume_torrent(&hash).await?;
+                        continue;
+                    } else {
+                        error!("qBittorrent entered Error state!");
+                        return Err(error::Error::QbitTorrentErrored);
+                    }
                 }
                 State::MissingFiles => {
-                    error!("qBittorrent entered MissingFiles error state!");
-                    return Err(error::Error::QbitTorrentErrored);
+                    if retry <= 3 {
+                        warn!(
+                        "qBittorrent entered MissingFiles error state! Waiting 5s before retrying"
+                    );
+                        sleep(Duration::from_millis(5000)).await;
+                        info!("Retrying {}/3 times", retry);
+                        retry += 1;
+                        client.resume_torrent(&hash).await?;
+                        continue;
+                    } else {
+                        error!("qBittorrent entered MissingFiles error state!");
+                        return Err(error::Error::QbitTorrentErrored);
+                    }
                 }
                 State::Downloading => {
                     pb.set_message(format!("Downloading chunk {}/{}", self.chunk, no_jobs));
