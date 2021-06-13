@@ -30,6 +30,7 @@ indicatif = "0.16.2"
 derive-getters = "0.2.0"
 toml = "0.5.8"
 parse-size = "1.0.0"
+regex = "1.5.4"
 
 [profile.release]
 panic = "abort"
