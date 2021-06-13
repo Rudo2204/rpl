@@ -60,9 +60,9 @@ username = "admin"
 password = "adminadmin"
 # default address of qbittorrent Web UI
 address = "http://localhost:8080"
-# upload_limit for torrents added (0 for unlimited) (unit: bytes/seconds)
+# upload_limit for torrents added (0 for unlimited) (unit: bytes/second)
 upload_limit = 0
-# download_limit for torrents added (0 for unlimited) (unit: bytes/seconds)
+# download_limit for torrents added (0 for unlimited) (unit: bytes/second)
 download_limit = 0
 
 [rclone]
