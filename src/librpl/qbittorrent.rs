@@ -436,6 +436,16 @@ impl QbitTorrent {
         };
         self
     }
+
+    pub fn upload_limit(mut self, limit: i64) -> Self {
+        self.upload_limit = Some(limit);
+        self
+    }
+
+    pub fn download_limit(mut self, limit: i64) -> Self {
+        self.download_limit = Some(limit);
+        self
+    }
 }
 
 #[async_trait]

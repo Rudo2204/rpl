@@ -60,6 +60,10 @@ username = "admin"
 password = "adminadmin"
 # default address of qbittorrent Web UI
 address = "http://localhost:8080"
+# upload_limit for torrents added (0 for unlimited)
+upload_limit = 0
+# download_limit for torrents added (0 for unlimited)
+download_limit = 0
 
 [rclone]
 # default transfers of rclone
@@ -202,14 +206,24 @@ struct RplQbitConfig {
     username: String,
     password: String,
     address: String,
+    upload_limit: i64,
+    download_limit: i64,
 }
 
 impl RplQbitConfig {
-    fn new(username: String, password: String, address: String) -> Self {
+    fn new(
+        username: String,
+        password: String,
+        address: String,
+        upload_limit: i64,
+        download_limit: i64,
+    ) -> Self {
         Self {
             username,
             password,
             address,
+            upload_limit,
+            download_limit,
         }
     }
 }
@@ -460,10 +474,24 @@ fn get_qb_config(
         &file_config.qbittorrent.address
     };
 
+    let upload_limit: i64 = if let Some(val) = matches.value_of("qbittorrent_upload_limit") {
+        val.parse().expect("Invalid download limit")
+    } else {
+        file_config.qbittorrent.upload_limit
+    };
+
+    let download_limit: i64 = if let Some(val) = matches.value_of("qbittorrent_download_limit") {
+        val.parse().expect("Invalid download limit")
+    } else {
+        file_config.qbittorrent.download_limit
+    };
+
     let config = RplQbitConfig::new(
         String::from(username),
         String::from(password),
         String::from(address),
+        upload_limit,
+        download_limit,
     );
 
     Ok(config)
@@ -707,6 +735,20 @@ async fn main() -> Result<()> {
                 .help("Set the address of qBittorrent Web UI"),
         )
         .arg(
+            Arg::with_name("qbittorrent_upload_limit")
+                .long("qbul")
+                .value_name("VALUE")
+                .takes_value(true)
+                .help("Set the upload limit for torrents in qBittorrent"),
+        )
+        .arg(
+            Arg::with_name("qbittorrent_download_limit")
+                .long("qbdl")
+                .value_name("VALUE")
+                .takes_value(true)
+                .help("Set the download limit for torrents in qBittorrent"),
+        )
+        .arg(
             Arg::with_name("rclone_transfers")
                 .short("t")
                 .long("transfers")
@@ -770,7 +812,9 @@ async fn main() -> Result<()> {
             shellexpand::full(&config.save_path)
                 .expect("Could not find the correct path to save data")
                 .into_owned(),
-        ));
+        ))
+        .upload_limit(qbconfig.upload_limit)
+        .download_limit(qbconfig.download_limit);
 
     let upload_client = RcloneClient::new(
         config.upload_client,
