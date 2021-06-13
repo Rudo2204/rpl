@@ -68,11 +68,12 @@ pub struct RcloneClient {
     destination: String,
     transfers: u16,
     drive_chunk_size: u16,
+    extra_custom_flags: Vec<String>,
 }
 
 impl RplUpload for Job {
     fn upload(&self, client: &RcloneClient, no_jobs: usize) -> Result<(), error::Error> {
-        let stderr = client.build_stderr_capture()?;
+        let stderr = client.build_stderr_capture(&client.extra_custom_flags)?;
         let reader = BufReader::new(stderr);
 
         let pb = ProgressBar::new(
@@ -109,6 +110,7 @@ impl RcloneClient {
         destination: String,
         transfers: u16,
         drive_chunk_size: u16,
+        extra_custom_flags: Vec<String>,
     ) -> Self {
         Self {
             variant,
@@ -116,11 +118,12 @@ impl RcloneClient {
             destination,
             transfers,
             drive_chunk_size,
+            extra_custom_flags,
         }
     }
 
     // TODO: implement a trait instead of hardcoding for qbittorrent like this
-    fn build_stderr_capture(&self) -> Result<ChildStderr, error::Error> {
+    fn build_stderr_capture(&self, extra_args: &[String]) -> Result<ChildStderr, error::Error> {
         let stderr = Command::new(self.variant.to_owned())
             .arg("copy")
             .arg("--exclude")
@@ -135,6 +138,7 @@ impl RcloneClient {
             .arg(self.transfers.to_string())
             .arg("--drive-chunk-size")
             .arg(format!("{}M", self.drive_chunk_size))
+            .args(extra_args)
             .arg(&self.source.to_str().unwrap())
             // TODO: check this dst to make it safe
             .arg(&self.destination)

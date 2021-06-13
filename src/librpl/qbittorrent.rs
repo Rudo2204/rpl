@@ -479,6 +479,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
                 offset += job.no_files;
                 continue;
             }
+            // TODO: find a way to not clone config every chunk
             torrent_client.add_new_torrent(config.clone()).await?;
             torrent_client.set_share_limit(&hash).await?;
             let disable_others = &job.disable_others(offset, no_all_files);

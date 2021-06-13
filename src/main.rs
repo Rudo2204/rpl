@@ -35,10 +35,10 @@ max_size = "5 GiB"
 torrent_client = "qbittorrent"
 # rclone or any rclone's variant (fclone, gclone) used for uploading
 upload_client = "rclone"
-# temporary data from pack will be saved to here
+# [REQUIRED] temporary data from pack will be saved to here
 # this directory should be dedicated for rpl
 save_path = ""
-# rclone remote path for uploading. Example: "nugu:/rpl"
+# [REQUIRED] rclone remote path for uploading. Example: "nugu:/rpl"
 remote_path = ""
 # Skip files that have size larger than max_size
 ignore_warning = false
@@ -67,7 +67,12 @@ transfers = 8
 # default drive chunk size (unit is MiB)
 # Note: with default rpl's setting (transfers = 8, drive_chunk_size = 64M)
 # rclone will consume 8*64 = 512 MiB of RAM when uploading
-drive_chunk_size = 64"#;
+drive_chunk_size = 64
+# by default rpl uses this command to upload the files
+# rclone copy --exclude "*.parts" --exclude "*.!qB" --verbose --stats 1s \
+# --use-json-log --transfers 8 --drive-chunk-size 64M <save_path> <remote_path>
+# you can add more custom flags here, but do not override rpl's flags.
+extra_custom_flags = ["--exclude", "RARBG_DO_NOT_MIRROR.exe"]"#;
 
 fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<Option<&str>> {
     let colors_line = ColoredLevelConfig::new()
@@ -214,13 +219,15 @@ impl RplQbitConfig {
 struct RplRcloneConfig {
     transfers: u16,
     drive_chunk_size: u16,
+    extra_custom_flags: Vec<String>,
 }
 
 impl RplRcloneConfig {
-    fn new(transfers: u16, drive_chunk_size: u16) -> Self {
+    fn new(transfers: u16, drive_chunk_size: u16, extra_custom_flags: Vec<String>) -> Self {
         Self {
             transfers,
             drive_chunk_size,
+            extra_custom_flags,
         }
     }
 }
@@ -471,7 +478,10 @@ fn get_rclone_config(
         file_config.rclone.drive_chunk_size
     };
 
-    let config = RplRcloneConfig::new(transfers, drive_chunk_size);
+    // TODO: find a way to not clone
+    let extra_custom_flags = file_config.rclone.extra_custom_flags.clone();
+
+    let config = RplRcloneConfig::new(transfers, drive_chunk_size, extra_custom_flags);
     Ok(config)
 }
 
@@ -754,6 +764,7 @@ async fn main() -> Result<()> {
         config.remote_path,
         rclone_config.transfers,
         rclone_config.drive_chunk_size,
+        rclone_config.extra_custom_flags,
     );
 
     pack_config
