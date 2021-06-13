@@ -125,6 +125,8 @@ impl RcloneClient {
             .arg("copy")
             .arg("--exclude")
             .arg("*.parts")
+            .arg("--exclude")
+            .arg("*.!qB")
             .arg("--verbose")
             .arg("--stats")
             .arg("1s")

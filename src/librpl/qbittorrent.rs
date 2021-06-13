@@ -6,6 +6,7 @@ use lava_torrent::torrent::v1::Torrent;
 use log::{debug, error, info};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
@@ -74,7 +75,7 @@ pub enum State {
 #[derive(Debug, Deserialize, Getters)]
 pub struct QbitTorrentInfo {
     added_on: i64,
-    amount_left: u64,
+    amount_left: i64,
     auto_tmm: bool,
     category: String,
     completed: i64,
@@ -457,7 +458,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
             &self.is_private()
         );
         info!(
-            "Qbittorrent App Version: {}",
+            "qBittorrent App Version: {}",
             torrent_client.application_version().await?
         );
 
@@ -473,7 +474,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         for job in jobs {
             job.info();
             if skipped > 0 {
-                info!("Chunk {} has been skipped", job.chunk);
+                info!("Chunk {}/{} has been skipped", job.chunk, no_jobs);
                 skipped -= 1;
                 offset += job.no_files;
                 continue;
@@ -507,7 +508,10 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
                 upload_client.variant
             );
             util::wait_with_progress(*seed.seed_wait()).await;
-            info!("Adding the torrent back to qbittorrent for seeding through rclone's mount");
+            info!(
+                "Adding the torrent back to qBittorrent for seeding through {}'s mount",
+                upload_client.variant
+            );
             let seed_config = config.skip_hash_checking(true).save_path(PathBuf::from(
                 shellexpand::full(seed.seed_path()).unwrap().into_owned(),
             ));
@@ -554,9 +558,9 @@ impl RplQbit for Job {
         no_jobs: usize,
     ) -> Result<(), error::Error> {
         client.resume_torrent(hash).await?;
-        let size = self.total_size as u64;
+        let size = self.total_size;
 
-        let pb = ProgressBar::new(size);
+        let pb = ProgressBar::new(size as u64);
         pb.set_style(ProgressStyle::default_bar()
             .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
             .progress_chars("#>-"));
@@ -609,35 +613,35 @@ impl RplQbit for Job {
                 }
                 State::Downloading => {
                     pb.set_message(format!("Downloading chunk {}/{}", self.chunk, no_jobs));
-                    pb.set_position(size - current_info.amount_left);
+                    pb.set_position(min(size - current_info.amount_left, size) as u64);
                 }
                 State::StalledDL => {
                     pb.set_message(format!(
                         "[Stalled] Downloading chunk {}/{}",
                         self.chunk, no_jobs
                     ));
-                    pb.set_position(size - current_info.amount_left);
+                    pb.set_position(min(size - current_info.amount_left, size) as u64);
                 }
                 State::QueuedDL => {
                     pb.set_message(format!(
                         "[Queued] Downloading chunk {}/{}",
                         self.chunk, no_jobs
                     ));
-                    pb.set_position(size - current_info.amount_left);
+                    pb.set_position(min(size - current_info.amount_left, size) as u64);
                 }
                 State::ForceDL => {
                     pb.set_message(format!(
                         "[Forced] Downloading chunk {}/{}",
                         self.chunk, no_jobs
                     ));
-                    pb.set_position(size - current_info.amount_left);
+                    pb.set_position(min(size - current_info.amount_left, size) as u64);
                 }
                 State::CheckingDL => {
                     pb.set_message(format!(
                         "[Checking] Downloading chunk {}/{}",
                         self.chunk, no_jobs
                     ));
-                    pb.set_position(size - current_info.amount_left);
+                    pb.set_position(min(size - current_info.amount_left, size) as u64);
                 }
                 State::PausedUP
                 | State::StalledUP
