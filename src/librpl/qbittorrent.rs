@@ -463,7 +463,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
         );
 
         let chunks = self.chunks()?;
-        let queue = build_queue(chunks, torrent);
+        let queue = build_queue(chunks, torrent)?;
         let no_all_files = queue.no_all_files;
         let jobs = queue.job;
         let no_jobs = jobs.len();

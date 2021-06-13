@@ -2,7 +2,6 @@ use humansize::{file_size_opts, FileSize};
 use lava_torrent::torrent::v1::Torrent;
 use log::{debug, error, warn};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use crate::librpl::error;
 use crate::librpl::RplChunk;
@@ -51,22 +50,55 @@ impl TorrentPack {
 }
 
 impl<'a> RplChunk<'a> for TorrentPack {
-    fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplFile<'a>>, error::Error> {
-        let file_vecs = match &self.torrent.files {
-            Some(vecs) => vecs,
-            None => return Err(error::Error::EmptyTorrent),
+    fn chunks(&'a mut self) -> Result<HashMap<&str, RplFile<'a>>, error::Error> {
+        let mut chunks: HashMap<&str, RplFile> = HashMap::new();
+        let file_vecs;
+        match &self.torrent.files {
+            Some(vecs) => file_vecs = vecs,
+            None => {
+                warn!("This torrent \"pack\" has only 1 file");
+                let path = &self.torrent.name;
+                let size = self.torrent.length;
+                if size > self.max_size_allow {
+                    if self.ignore_warning {
+                        warn!(
+                            "File `{}` has size {} which is larger than maximum size allowed {}. This file will be skipped.",
+                            path,
+                            size.file_size(file_size_opts::BINARY).unwrap(),
+                            self.max_size_allow
+                                .file_size(file_size_opts::BINARY)
+                                .unwrap()
+                        );
+                        chunks.insert(path, RplFile::new(path, size, -1));
+                        return Ok(chunks);
+                    } else {
+                        error!(
+                            "File `{}` has size {} which is larger than maximum size allowed {}. If you want to ignore this file, rerun the program with -f/--force",
+                            path,
+                            size.file_size(file_size_opts::BINARY).unwrap(),
+                            self.max_size_allow
+                                .file_size(file_size_opts::BINARY)
+                                .unwrap()
+                        );
+
+                        return Err(error::Error::MaxSizeAllowedTooSmall);
+                    }
+                } else {
+                    chunks.insert(path, RplFile::new(&path, size, 1));
+                    return Ok(chunks);
+                }
+            }
         };
 
         let files_in_pack = file_vecs.len();
 
-        let mut chunks: HashMap<&PathBuf, RplFile> = HashMap::new();
         let mut current_chunk: i32 = 1;
 
         let mut current_sum_size: i64 = 0;
         for (index, file) in file_vecs.iter().enumerate() {
             if file.length > self.max_size_allow {
                 chunks.insert(
-                    &file.path,
+                    file.path.to_str().unwrap(),
                     RplFile::new(file.path.to_str().unwrap(), file.length, -1),
                 );
 
@@ -92,6 +124,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                                 .file_size(file_size_opts::BINARY)
                                 .unwrap()
                         );
+
                     return Err(error::Error::MaxSizeAllowedTooSmall);
                 }
             // last file case
@@ -101,7 +134,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                 }
 
                 chunks.insert(
-                    &file.path,
+                    file.path.to_str().unwrap(),
                     RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
                 );
                 debug!(
@@ -120,7 +153,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                     current_chunk,
                 );
                 chunks.insert(
-                    &file.path,
+                    file.path.to_str().unwrap(),
                     RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
                 );
                 current_sum_size += file.length;
@@ -136,7 +169,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                     current_chunk,
                 );
                 chunks.insert(
-                    &file.path,
+                    file.path.to_str().unwrap(),
                     RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
                 );
             }

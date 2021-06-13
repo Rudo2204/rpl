@@ -11,7 +11,6 @@ use lava_torrent::torrent::v1::Torrent;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 pub use crate::librpl::error as _;
 pub use crate::librpl::qbittorrent::QbitConfig;
@@ -38,7 +37,7 @@ impl<'a> RplFile<'a> {
 }
 
 pub trait RplChunk<'a> {
-    fn chunks(&'a mut self) -> Result<HashMap<&PathBuf, RplFile<'a>>, error::Error>;
+    fn chunks(&'a mut self) -> Result<HashMap<&str, RplFile<'a>>, error::Error>;
 }
 
 pub struct Job {
@@ -100,36 +99,53 @@ impl Queue {
     }
 }
 
-pub fn build_queue(datamap: HashMap<&PathBuf, RplFile<'_>>, torrent: Torrent) -> Queue {
-    let mut current_chunk = 1;
-    let mut total_size: i64 = 0;
+pub fn build_queue(
+    datamap: HashMap<&str, RplFile<'_>>,
+    torrent: Torrent,
+) -> Result<Queue, error::Error> {
     let mut job: Vec<Job> = Vec::new();
-    let mut files = 0;
-    let mut no_all_files: i32 = 0;
 
-    for f in torrent.files.unwrap() {
-        no_all_files += 1;
+    match torrent.files {
+        Some(vecs) => {
+            let mut current_chunk = 1;
+            let mut total_size: i64 = 0;
+            let mut files = 0;
+            let mut no_all_files: i32 = 0;
+            for f in vecs {
+                no_all_files += 1;
 
-        let file = datamap
-            .get_key_value(&f.path)
-            .expect("Could not find file in data map")
-            .1;
+                let file = datamap
+                    .get_key_value(f.path.to_str().unwrap())
+                    .expect("Could not find file in data map")
+                    .1;
 
-        if file.chunk < 0 {
-            continue;
-        } else if file.chunk != current_chunk {
+                if file.chunk < 0 {
+                    continue;
+                } else if file.chunk != current_chunk {
+                    job.push(Job::new(current_chunk, total_size, files));
+                    files = 0;
+                    total_size = 0;
+                    current_chunk += 1;
+                }
+                files += 1;
+                total_size += file.length;
+            }
+            // finish off last chunk
             job.push(Job::new(current_chunk, total_size, files));
-            files = 0;
-            total_size = 0;
-            current_chunk += 1;
+            Ok(Queue::new(no_all_files, job))
         }
-        files += 1;
-        total_size += file.length;
+        None => {
+            let file = datamap
+                .get_key_value(torrent.name.as_str())
+                .expect("Could not find single file in data map")
+                .1;
+            if file.chunk < 0 {
+                return Err(error::Error::NothingToLeech);
+            }
+            job.push(Job::new(1, torrent.length, 1));
+            Ok(Queue::new(1, job))
+        }
     }
-
-    // finish off last chunk
-    job.push(Job::new(current_chunk, total_size, files));
-    Queue::new(no_all_files, job)
 }
 
 pub trait RplUpload {

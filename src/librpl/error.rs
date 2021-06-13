@@ -16,8 +16,8 @@ pub enum Error {
     MissingCookie,
     #[error("Could not slice off SID from returned cookie")]
     SliceError,
-    #[error("The torrent added does not have any files")]
-    EmptyTorrent,
+    #[error("There is nothing in the pack to leech")]
+    NothingToLeech,
     #[error("qBittorrent returned nothing for the hash provided")]
     QbitEmptyTorrentInfo,
     #[error("qBittorrent client: The torrent has encountered an unexpected error")]
