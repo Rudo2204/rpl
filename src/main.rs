@@ -232,6 +232,13 @@ impl RplRcloneConfig {
     }
 }
 
+#[derive(Deserialize)]
+struct MagnetTorrent {
+    #[allow(dead_code)]
+    result: i64,
+    url: String,
+}
+
 // should always return error!
 fn write_default_config(config_path: &Path) -> Result<(), error::Error> {
     let mut file = OpenOptions::new()
@@ -491,21 +498,28 @@ async fn parse_input(matches: &ArgMatches<'_>) -> Result<Vec<u8>, error::Error> 
     if input.contains("magnet") {
         debug!("User inputted a magnet link, will now download the torrent file first");
         let client = reqwest::Client::new();
-        let form = reqwest::multipart::Form::new().text("magnet", input.to_string());
         let torrent_resp = client
-            .post("http://magnet2torrent.com/upload/")
-            .multipart(form)
+            .get(format!(
+                "https://anonymiz.com/magnet2torrent/magnet2torrent.php?magnet={}",
+                input
+            ))
             .send()
+            .await?
+            .json::<MagnetTorrent>()
             .await?;
 
-        let torrent_location = torrent_resp.url();
+        let re = regex::Regex::new("^(https://itorrents.org/torrent/.*.torrent)<").unwrap();
+        let caps = re
+            .captures(&torrent_resp.url)
+            .expect("Could not capture torrent file link from MagnetTorrent response");
+        let torrent_location = caps
+            .get(1)
+            .expect("Could not get capture group 1 from captures")
+            .as_str();
 
         debug!("The torrent file location is {}", torrent_location);
 
-        let response = reqwest::get(torrent_location.as_str())
-            .await?
-            .bytes()
-            .await?;
+        let response = reqwest::get(torrent_location).await?.bytes().await?;
         return Ok(response.to_vec());
     } else {
         let tmp = shellexpand::full(input)
