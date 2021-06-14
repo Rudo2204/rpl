@@ -266,7 +266,7 @@ fn write_default_config(config_path: &Path) -> Result<(), error::Error> {
         "No config found, so I have created one at {}. Edit this file and run rpl again.",
         config_path.display()
     );
-    Err(error::Error::InvalidRplConfig)
+    Err(error::Error::SaveRemoteEmptyError)
 }
 
 impl Config {
@@ -381,14 +381,16 @@ fn get_running_config(
         let path = PathBuf::from(shellexpand::full(p).unwrap().into_owned());
         match !path.exists() {
             true => {
-                return Err(error::Error::InvalidRplConfig);
+                debug!("{} does not exist. I will create it now", path.display());
+                fs::create_dir_all(&path).expect("Could not create save_path from CLI arg");
             }
-            false => String::from(path.to_str().unwrap()),
+            false => (),
         }
+        String::from(path.to_str().unwrap())
     } else {
         match &file_config.save_path_invalid() {
             true => {
-                return Err(error::Error::InvalidRplConfig);
+                return Err(error::Error::SavePathEmptyError);
             }
             false => String::from(&file_config.rpl.save_path),
         }
@@ -400,7 +402,7 @@ fn get_running_config(
             .into_owned(),
     )) {
         Ok(size) => size,
-        Err(_e) => return Err(error::Error::InvalidRplConfig),
+        Err(_e) => return Err(error::Error::DiskSpaceReadError),
     };
 
     let max_size_allow: u64 = if let Some(percentage) = matches.value_of("max_size_percentage") {
@@ -419,16 +421,11 @@ fn get_running_config(
     };
 
     let remote_path = if let Some(path) = matches.value_of("remote_path") {
-        match !Path::new(path).exists() {
-            true => {
-                return Err(error::Error::InvalidRplConfig);
-            }
-            false => path,
-        }
+        path
     } else {
         match &file_config.remote_path_invalid() {
             true => {
-                return Err(error::Error::InvalidRplConfig);
+                return Err(error::Error::RemotePathEmptyError);
             }
             false => &file_config.rpl.remote_path,
         }
@@ -619,7 +616,7 @@ async fn main() -> Result<()> {
         .about(crate_description!())
         .arg(
             Arg::with_name("input")
-                .help("Input torrent or magnet")
+                .help("Input torrent file or magnet string")
                 .index(1)
                 .takes_value(true)
                 .required(true),
@@ -643,7 +640,7 @@ async fn main() -> Result<()> {
                 .value_name("VALUE")
                 .takes_value(true)
                 .conflicts_with("max_size")
-                .help("Set percentage of free available disk space allowed for rpl"),
+                .help("Set percentage of free available disk space allowed for rpl (1-100)"),
         )
         .arg(
             Arg::with_name("max_size")
@@ -687,12 +684,12 @@ async fn main() -> Result<()> {
             Arg::with_name("ignore_warning")
                 .short("f")
                 .long("force")
-                .help("Force rpl to ignore warning"),
+                .help("Force rpl to ignore warning about max_size being too small"),
         )
         .arg(
             Arg::with_name("seed_enable")
                 .long("seed")
-                .help("Seed the torrent after rpl finishes leeching"),
+                .help("Seed the torrent after leeching"),
         )
         .arg(
             Arg::with_name("seed_path")
@@ -704,14 +701,14 @@ async fn main() -> Result<()> {
             Arg::with_name("seed_wait")
                 .long("seed-wait")
                 .value_name("VALUE")
-                .help("Set the wait time for rclone's mount to refresh (in seconds)"),
+                .help("Set the wait time for rclone to refresh mount path (in seconds)"),
         )
         .arg(
             Arg::with_name("skip")
                 .long("skip")
                 .value_name("VALUE")
                 .takes_value(true)
-                .help("Skip number of chunks (in case of rpl unexpectedly crashes)"),
+                .help("Skip number of chunks (in case of unexpected errors)"),
         )
         .arg(
             Arg::with_name("qbittorrent_username")
@@ -739,14 +736,14 @@ async fn main() -> Result<()> {
                 .long("qbul")
                 .value_name("VALUE")
                 .takes_value(true)
-                .help("Set the upload limit for torrents in qBittorrent"),
+                .help("Set the upload limit for torrents in qBittorrent (bytes/second)"),
         )
         .arg(
             Arg::with_name("qbittorrent_download_limit")
                 .long("qbdl")
                 .value_name("VALUE")
                 .takes_value(true)
-                .help("Set the download limit for torrents in qBittorrent"),
+                .help("Set the download limit for torrents in qBittorrent (bytes/second)"),
         )
         .arg(
             Arg::with_name("rclone_transfers")

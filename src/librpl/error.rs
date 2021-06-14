@@ -30,16 +30,22 @@ pub enum Error {
     MaxSizeAllowedTooSmall,
     #[error("Invalid max_size_percentage, allowed value are 0-100")]
     InvalidMaxSizePercentage,
-    #[error("Invalid rpl config, please recheck the config")]
-    InvalidRplConfig,
     #[error("qBittorrent client: The torrent has entered unimplemented state!")]
     QbitTorrentUnimplementedState,
     #[error("Config error: Unsupported torrent client")]
     UnsupportedTorrentClient,
-    #[error("Config error: rclone's mount path does not exist")]
+    #[error("Config error: mount path does not exist")]
     MountPathNotExist,
     #[error("Config error: Unsupported rclone variant (only rclone/fclone/gclone is supported)")]
     UnsupportedRcloneVariant,
-    #[error("Config error: Invalid input")]
+    #[error("Input error: rpl could not parse the input (only torrent file and magnet link is supported)")]
     RplInvalidInput,
+    #[error("Config error: save_path cannot be empty")]
+    SavePathEmptyError,
+    #[error("Config error: save_path and remote_path in config file cannot be empty")]
+    SaveRemoteEmptyError,
+    #[error("Config error: remote_path cannot be empty")]
+    RemotePathEmptyError,
+    #[error("Config error: could not read available disk space from save_path")]
+    DiskSpaceReadError,
 }
