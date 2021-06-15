@@ -7,7 +7,7 @@ use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
 use lava_torrent::torrent::v1::Torrent;
-use log::{debug, error, warn, LevelFilter};
+use log::{debug, error, info, warn, LevelFilter};
 use parse_size::parse_size;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -517,7 +517,21 @@ fn get_rclone_config(
     Ok(config)
 }
 
-async fn parse_input(matches: &ArgMatches<'_>) -> Result<Vec<u8>, error::Error> {
+struct TorrentInput {
+    raw_data: Vec<u8>,
+    is_magnet: bool,
+}
+
+impl TorrentInput {
+    fn new(raw_data: Vec<u8>, is_magnet: bool) -> Self {
+        Self {
+            raw_data,
+            is_magnet,
+        }
+    }
+}
+
+async fn parse_input(matches: &ArgMatches<'_>) -> Result<TorrentInput, error::Error> {
     let input = matches.value_of("input").unwrap();
 
     if input.contains("magnet") {
@@ -545,17 +559,17 @@ async fn parse_input(matches: &ArgMatches<'_>) -> Result<Vec<u8>, error::Error> 
         debug!("The torrent file location is {}", torrent_location);
 
         let response = reqwest::get(torrent_location).await?.bytes().await?;
-        return Ok(response.to_vec());
+        return Ok(TorrentInput::new(response.to_vec(), true));
     } else {
         let tmp = shellexpand::full(input)
             .expect("Could not look up a variable in input")
             .into_owned();
 
         if Path::new(&tmp).exists() {
-            let mut torrent_file = File::open(tmp).unwrap();
+            let mut torrent_file = File::open(&tmp).unwrap();
             let mut raw_torrent = Vec::new();
             torrent_file.read_to_end(&mut raw_torrent)?;
-            return Ok(raw_torrent);
+            return Ok(TorrentInput::new(raw_torrent, false));
         }
     }
 
@@ -792,10 +806,10 @@ async fn main() -> Result<()> {
     let qbconfig = get_qb_config(&file_config, &matches)?;
     let rclone_config = get_rclone_config(&file_config, &matches)?;
     let seed_config = get_seed_config(&file_config, &matches)?;
-    let raw_torrent = parse_input(&matches).await?;
+    let parsed_input = parse_input(&matches).await?;
 
     let mut pack_config = TorrentPack::new(
-        Torrent::read_from_bytes(&raw_torrent).unwrap(),
+        Torrent::read_from_bytes(&parsed_input.raw_data).unwrap(),
         config.ignore_warning,
     )
     .max_size(config.max_size as i64);
@@ -803,7 +817,7 @@ async fn main() -> Result<()> {
     let qbit = QbitConfig::new(&qbconfig.username, &qbconfig.password, &qbconfig.address).await?;
 
     let torrent_config = QbitTorrent::default()
-        .torrents(Torrent::read_from_bytes(&raw_torrent).unwrap())
+        .torrents(Torrent::read_from_bytes(&parsed_input.raw_data).unwrap())
         .paused(true)
         .save_path(PathBuf::from(
             shellexpand::full(&config.save_path)
@@ -824,7 +838,7 @@ async fn main() -> Result<()> {
 
     pack_config
         .leech_torrent(
-            Torrent::read_from_bytes(&raw_torrent).unwrap(),
+            Torrent::read_from_bytes(&parsed_input.raw_data).unwrap(),
             torrent_config,
             qbit,
             upload_client,
@@ -832,6 +846,17 @@ async fn main() -> Result<()> {
             skip,
         )
         .await?;
+
+    match parsed_input.is_magnet {
+        true => info!(
+            "Magnet `{}` finished leeching!",
+            matches.value_of("input").unwrap()
+        ),
+        false => info!(
+            "File `{}` finished leeching!",
+            matches.value_of("input").unwrap()
+        ),
+    }
 
     debug!("-----Everything is finished!-----");
     if lock {
