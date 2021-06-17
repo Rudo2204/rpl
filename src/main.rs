@@ -33,7 +33,7 @@ max_size_percentage = 0
 max_size = "5 GiB"
 # only qbittorrent is available atm
 torrent_client = "qbittorrent"
-# rclone or any rclone's variant (fclone, gclone) used for uploading
+# rclone or other rclone's variants (fclone, gclone, xclone) used for uploading
 upload_client = "rclone"
 # [REQUIRED] temporary data from pack will be saved to here
 # this directory should be dedicated for rpl
@@ -371,7 +371,7 @@ fn get_running_config(
     };
 
     match upload_client {
-        "rclone" | "fclone" | "gclone" => (),
+        "rclone" | "fclone" | "gclone" | "xclone" => (),
         _ => {
             return Err(error::Error::UnsupportedRcloneVariant);
         }

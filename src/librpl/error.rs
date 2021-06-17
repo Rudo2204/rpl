@@ -36,7 +36,9 @@ pub enum Error {
     UnsupportedTorrentClient,
     #[error("Config error: mount path does not exist")]
     MountPathNotExist,
-    #[error("Config error: Unsupported rclone variant (only rclone/fclone/gclone is supported)")]
+    #[error(
+        "Config error: Unsupported rclone variant (only rclone/fclone/gclone/xclone is supported)"
+    )]
     UnsupportedRcloneVariant,
     #[error("Input error: rpl could not parse the input (only torrent file and magnet link is supported)")]
     RplInvalidInput,
