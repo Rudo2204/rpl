@@ -577,7 +577,10 @@ impl RplQbit for Job {
             .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
             .progress_chars("#>-"));
 
-        pb.set_message(format!("Waiting to download chunk {}", self.chunk));
+        pb.set_message(format!(
+            "Waiting to download chunk {}/{}",
+            self.chunk, no_jobs
+        ));
 
         loop {
             let current_info = client.get_torrent_info(hash).await?;
