@@ -7,6 +7,19 @@ use crate::librpl::error;
 use crate::librpl::RplChunk;
 use crate::librpl::RplFile;
 
+pub fn get_largest_filesize(torrent: Torrent) -> i64 {
+    match torrent.files {
+        None => torrent.length,
+        Some(vec_files) => {
+            vec_files
+                .iter()
+                .max_by(|x, y| x.length.cmp(&y.length))
+                .expect("Could not find file with largest fliesize")
+                .length
+        }
+    }
+}
+
 pub struct TorrentPack {
     max_size_allow: i64,
     pub torrent: Torrent,

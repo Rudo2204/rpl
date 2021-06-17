@@ -6,6 +6,7 @@ use clap::{
 use derive_getters::Getters;
 use fern::colors::{Color, ColoredLevelConfig};
 use fs2::FileExt;
+use humansize::{file_size_opts, FileSize};
 use lava_torrent::torrent::v1::Torrent;
 use log::{debug, error, info, warn, LevelFilter};
 use parse_size::parse_size;
@@ -20,7 +21,7 @@ use librpl::util;
 use librpl::error;
 use librpl::qbittorrent::{QbitConfig, QbitTorrent};
 use librpl::rclone::RcloneClient;
-use librpl::torrent_parser::TorrentPack;
+use librpl::torrent_parser::{get_largest_filesize, TorrentPack};
 use librpl::{RplLeech, SeedSettings};
 
 pub const PROGRAM_NAME: &str = "rpl";
@@ -621,6 +622,32 @@ fn get_seed_config(
     Ok(config)
 }
 
+fn check_max_size_requirements(
+    config: &RplRunningConfig,
+    raw_data: &[u8],
+) -> Result<(), error::Error> {
+    let largest_file = get_largest_filesize(Torrent::read_from_bytes(raw_data).unwrap());
+
+    match config.ignore_warning {
+        false => {
+            error!(
+                "User specified max_size = {}, but the largest file in the pack is {}!",
+                config.max_size.file_size(file_size_opts::BINARY).unwrap(),
+                largest_file.file_size(file_size_opts::BINARY).unwrap(),
+            );
+            return Err(error::Error::MaxSizeAllowedTooSmall);
+        }
+        true => {
+            warn!(
+                "User specified max_size = {}, but the largest file in the pack is {}! Some files will be skipped!",
+                config.max_size.file_size(file_size_opts::BINARY).unwrap(),
+                largest_file.file_size(file_size_opts::BINARY).unwrap(),
+            );
+            return Ok(());
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let matches = App::new(PROGRAM_NAME)
@@ -807,6 +834,8 @@ async fn main() -> Result<()> {
     let rclone_config = get_rclone_config(&file_config, &matches)?;
     let seed_config = get_seed_config(&file_config, &matches)?;
     let parsed_input = parse_input(&matches).await?;
+
+    check_max_size_requirements(&config, &parsed_input.raw_data)?;
 
     let mut pack_config = TorrentPack::new(
         Torrent::read_from_bytes(&parsed_input.raw_data).unwrap(),
