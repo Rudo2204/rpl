@@ -22,20 +22,20 @@ struct RcloneCopyResp {
 #[derive(Debug, Deserialize)]
 struct RcloneStatsResp {
     bytes: u64,
-    checks: u32,
+    checks: Option<u32>,
     #[serde(rename = "deletedDirs")]
     deleted_dirs: Option<u32>,
-    deletes: u32,
+    deletes: Option<u32>,
     #[serde(rename = "elapsedTime")]
-    elapsed_time: f32,
-    errors: u32,
+    elapsed_time: Option<f32>,
+    errors: Option<u32>,
     eta: Option<u64>,
     #[serde(rename = "fatalError")]
-    fatal_error: bool,
-    renames: u32,
+    fatal_error: Option<bool>,
+    renames: Option<u32>,
     #[serde(rename = "retryError")]
     retry_error: bool,
-    speed: f32,
+    speed: Option<f32>,
     #[serde(rename = "totalBytes")]
     total_bytes: Option<u64>,
     #[serde(rename = "totalChecks")]
@@ -45,7 +45,7 @@ struct RcloneStatsResp {
     #[serde(rename = "transferTime")]
     transfer_time: Option<f32>,
     transferring: Option<Vec<RcloneTransferring>>,
-    transfers: u32,
+    transfers: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,9 +93,11 @@ impl RplUpload for Job {
             .filter(|line| line.contains("ETA"))
             .for_each(|line| {
                 let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
-                if resp.stats.speed > 0f32 {
-                    pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
-                    pb.set_position(resp.stats.bytes);
+                if let Some(speed) = resp.stats.speed {
+                    if speed > 0f32 {
+                        pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
+                        pb.set_position(resp.stats.bytes);
+                    }
                 }
             });
 
