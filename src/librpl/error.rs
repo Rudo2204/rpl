@@ -40,7 +40,7 @@ pub enum Error {
         "Config error: Unsupported rclone variant (only rclone/fclone/gclone/xclone is supported)"
     )]
     UnsupportedRcloneVariant,
-    #[error("Input error: rpl could not parse the input (only torrent file and magnet link is supported)")]
+    #[error("Input error: rpl could not parse the input (only torrent file, url link and magnet link are supported)")]
     RplInvalidInput,
     #[error("Config error: save_path cannot be empty")]
     SavePathEmptyError,

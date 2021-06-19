@@ -521,14 +521,20 @@ fn get_rclone_config(
 
 struct TorrentInput {
     raw_data: Vec<u8>,
-    is_magnet: bool,
+    input_type: RplInputType,
+}
+
+enum RplInputType {
+    NormalPath,
+    UrlLink,
+    MagnetString,
 }
 
 impl TorrentInput {
-    fn new(raw_data: Vec<u8>, is_magnet: bool) -> Self {
+    fn new(raw_data: Vec<u8>, input_type: RplInputType) -> Self {
         Self {
             raw_data,
-            is_magnet,
+            input_type,
         }
     }
 }
@@ -536,7 +542,21 @@ impl TorrentInput {
 async fn parse_input(matches: &ArgMatches<'_>) -> Result<TorrentInput, error::Error> {
     let input = matches.value_of("input").unwrap();
 
-    if input.contains("magnet") {
+    let try_path = shellexpand::full(input)
+        .expect("Could not look up a variable in input")
+        .into_owned();
+    if Path::new(&try_path).exists() {
+        debug!("User inputted a normal path. Will now try to parse it.");
+        let mut torrent_file = File::open(&try_path).unwrap();
+        let mut raw_torrent = Vec::new();
+        torrent_file.read_to_end(&mut raw_torrent)?;
+        return Ok(TorrentInput::new(raw_torrent, RplInputType::NormalPath));
+    } else if url::Url::parse(input).is_ok() {
+        debug!("User inputted a url link. Will now download its content and try to parse it.");
+        let response = reqwest::get(input).await?.bytes().await?;
+        return Ok(TorrentInput::new(response.to_vec(), RplInputType::UrlLink));
+    } else if input.contains("magnet") {
+        // TODO: This is not ideal, maybe use a dedicated crate
         debug!("User inputted a magnet link, will now download the torrent file first");
         let client = reqwest::Client::new();
         let torrent_resp = client
@@ -561,21 +581,13 @@ async fn parse_input(matches: &ArgMatches<'_>) -> Result<TorrentInput, error::Er
         debug!("The torrent file location is {}", torrent_location);
 
         let response = reqwest::get(torrent_location).await?.bytes().await?;
-        return Ok(TorrentInput::new(response.to_vec(), true));
+        return Ok(TorrentInput::new(
+            response.to_vec(),
+            RplInputType::MagnetString,
+        ));
     } else {
-        let tmp = shellexpand::full(input)
-            .expect("Could not look up a variable in input")
-            .into_owned();
-
-        if Path::new(&tmp).exists() {
-            let mut torrent_file = File::open(&tmp).unwrap();
-            let mut raw_torrent = Vec::new();
-            torrent_file.read_to_end(&mut raw_torrent)?;
-            return Ok(TorrentInput::new(raw_torrent, false));
-        }
+        return Err(error::Error::RplInvalidInput);
     }
-
-    Err(error::Error::RplInvalidInput)
 }
 
 fn get_seed_config(
@@ -636,7 +648,7 @@ fn check_max_size_requirements(
                 config.max_size.file_size(file_size_opts::BINARY).unwrap(),
                 largest_file.file_size(file_size_opts::BINARY).unwrap(),
             );
-            return Err(error::Error::MaxSizeAllowedTooSmall);
+            Err(error::Error::MaxSizeAllowedTooSmall)
         }
         true => {
             warn!(
@@ -644,7 +656,7 @@ fn check_max_size_requirements(
                 config.max_size.file_size(file_size_opts::BINARY).unwrap(),
                 largest_file.file_size(file_size_opts::BINARY).unwrap(),
             );
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -658,7 +670,7 @@ async fn main() -> Result<()> {
         .about(crate_description!())
         .arg(
             Arg::with_name("input")
-                .help("Input torrent file or magnet string")
+                .help("Input torrent file or url link or magnet string")
                 .index(1)
                 .takes_value(true)
                 .required(true),
@@ -877,13 +889,17 @@ async fn main() -> Result<()> {
         )
         .await?;
 
-    match parsed_input.is_magnet {
-        true => info!(
-            "Magnet `{}` finished leeching!",
+    match parsed_input.input_type {
+        RplInputType::NormalPath => info!(
+            "File `{}` finished leeching!",
             matches.value_of("input").unwrap()
         ),
-        false => info!(
-            "File `{}` finished leeching!",
+        RplInputType::UrlLink => info!(
+            "Url link `{}` finished leeching!",
+            matches.value_of("input").unwrap()
+        ),
+        RplInputType::MagnetString => info!(
+            "Magnet `{}` finished leeching!",
             matches.value_of("input").unwrap()
         ),
     }
