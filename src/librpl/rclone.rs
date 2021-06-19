@@ -142,7 +142,6 @@ impl RcloneClient {
             .arg(format!("{}M", self.drive_chunk_size))
             .args(extra_args)
             .arg(&self.source.to_str().unwrap())
-            // TODO: check this dst to make it safe
             .arg(&self.destination)
             .stderr(Stdio::piped())
             .spawn()?
