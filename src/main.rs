@@ -27,7 +27,7 @@ use librpl::{RplLeech, SeedSettings};
 pub const PROGRAM_NAME: &str = "rpl";
 const STOCK_CONFIG: &str = r#"[rpl]
 # rpl will use this percentage of available disk space as max_size
-# value range: 1-100, or 0 to use max_size value instead (recommended)
+# value range: 1-100, or 0 to use max_size value instead (recommended to use max_size instead)
 max_size_percentage = 0
 # maximum size per chunk allowed for rpl. The bigger the value, the faster the download speed
 # if max_size_percentage is > 0 then this field will have no effect
@@ -61,10 +61,10 @@ username = "admin"
 password = "adminadmin"
 # address of qbittorrent Web UI
 address = "http://localhost:8080"
-# upload_limit for torrents added (0 for unlimited) (unit: bytes/second)
-upload_limit = 0
-# download_limit for torrents added (0 for unlimited) (unit: bytes/second)
-download_limit = 0
+# upload_limit for torrents added (unit: value/second) (0 for unlimited)
+upload_limit = "0 MiB"
+# download_limit for torrents added (unit: value/second) (0 for unlimited)
+download_limit = "0 MiB"
 
 [rclone]
 # default transfers of rclone
@@ -77,7 +77,8 @@ drive_chunk_size = 64
 # rclone copy --exclude "*.parts" --exclude "*.!qB" --verbose --stats 1s \
 # --use-json-log --transfers 8 --drive-chunk-size 64M <save_path> <remote_path>
 # you can add more custom flags here, but do not override rpl's flags.
-# the flags and their args must be in the correct order, like see example below
+# the flags and their args must be separated, and in ther correct order
+# See example below. If no extra flags is needed, leave it as []
 extra_custom_flags = ["--exclude", "RARBG_DO_NOT_MIRROR.exe"]"#;
 
 fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<Option<&str>> {
@@ -203,8 +204,17 @@ impl RplRunningConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, Getters)]
+#[derive(Serialize, Deserialize)]
 struct RplQbitConfig {
+    username: String,
+    password: String,
+    address: String,
+    upload_limit: String,
+    download_limit: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RplRunningQbitConfig {
     username: String,
     password: String,
     address: String,
@@ -212,7 +222,7 @@ struct RplQbitConfig {
     download_limit: i64,
 }
 
-impl RplQbitConfig {
+impl RplRunningQbitConfig {
     fn new(
         username: String,
         password: String,
@@ -455,7 +465,7 @@ fn get_running_config(
 fn get_qb_config(
     file_config: &Config,
     matches: &ArgMatches,
-) -> Result<RplQbitConfig, error::Error> {
+) -> Result<RplRunningQbitConfig, error::Error> {
     let username = if let Some(usr) = matches.value_of("qbittorrent_username") {
         usr
     } else {
@@ -474,24 +484,26 @@ fn get_qb_config(
         &file_config.qbittorrent.address
     };
 
-    let upload_limit: i64 = if let Some(val) = matches.value_of("qbittorrent_upload_limit") {
-        val.parse().expect("Invalid upload limit")
+    let upload_limit: u64 = if let Some(val) = matches.value_of("qbittorrent_upload_limit") {
+        parse_size(val).expect("Could not parse the value of qbittorrent upload limit")
     } else {
-        file_config.qbittorrent.upload_limit
+        parse_size(&file_config.qbittorrent.upload_limit)
+            .expect("Could not parse qbittorrent upload limit in file config")
     };
 
-    let download_limit: i64 = if let Some(val) = matches.value_of("qbittorrent_download_limit") {
-        val.parse().expect("Invalid download limit")
+    let download_limit: u64 = if let Some(val) = matches.value_of("qbittorrent_download_limit") {
+        parse_size(val).expect("Could not parse the value of qbittorrent download limit")
     } else {
-        file_config.qbittorrent.download_limit
+        parse_size(&file_config.qbittorrent.download_limit)
+            .expect("Could not parse qbittorrent upload limit in file config")
     };
 
-    let config = RplQbitConfig::new(
+    let config = RplRunningQbitConfig::new(
         String::from(username),
         String::from(password),
         String::from(address),
-        upload_limit,
-        download_limit,
+        upload_limit as i64,
+        download_limit as i64,
     );
 
     Ok(config)
@@ -551,11 +563,11 @@ async fn parse_input(matches: &ArgMatches<'_>) -> Result<TorrentInput, error::Er
         let mut torrent_file = File::open(&try_path).unwrap();
         let mut raw_torrent = Vec::new();
         torrent_file.read_to_end(&mut raw_torrent)?;
-        return Ok(TorrentInput::new(raw_torrent, RplInputType::NormalPath));
+        Ok(TorrentInput::new(raw_torrent, RplInputType::NormalPath))
     } else if url::Url::parse(input).is_ok() {
         debug!("User inputted a url link. Will now download its content and try to parse it.");
         let response = reqwest::get(input).await?.bytes().await?;
-        return Ok(TorrentInput::new(response.to_vec(), RplInputType::UrlLink));
+        Ok(TorrentInput::new(response.to_vec(), RplInputType::UrlLink))
     } else if input.contains("magnet") {
         // TODO: This is not ideal, maybe use a dedicated crate
         debug!("User inputted a magnet link, will now download the torrent file first");
@@ -582,12 +594,12 @@ async fn parse_input(matches: &ArgMatches<'_>) -> Result<TorrentInput, error::Er
         debug!("The torrent file location is {}", torrent_location);
 
         let response = reqwest::get(torrent_location).await?.bytes().await?;
-        return Ok(TorrentInput::new(
+        Ok(TorrentInput::new(
             response.to_vec(),
             RplInputType::MagnetString,
-        ));
+        ))
     } else {
-        return Err(error::Error::RplInvalidInput);
+        Err(error::Error::RplInvalidInput)
     }
 }
 
@@ -642,23 +654,27 @@ fn check_max_size_requirements(
 ) -> Result<(), error::Error> {
     let largest_file = get_largest_filesize(Torrent::read_from_bytes(raw_data).unwrap());
 
-    match config.ignore_warning {
-        false => {
-            error!(
-                "User specified max_size = {}, but the largest file in the pack is {}!",
-                config.max_size.file_size(file_size_opts::BINARY).unwrap(),
-                largest_file.file_size(file_size_opts::BINARY).unwrap(),
-            );
-            Err(error::Error::MaxSizeAllowedTooSmall)
-        }
-        true => {
-            warn!(
+    if largest_file > config.max_size as i64 {
+        match config.ignore_warning {
+            false => {
+                error!(
+                    "User specified max_size = {}, but the largest file in the pack is {}!",
+                    config.max_size.file_size(file_size_opts::BINARY).unwrap(),
+                    largest_file.file_size(file_size_opts::BINARY).unwrap(),
+                );
+                Err(error::Error::MaxSizeAllowedTooSmall)
+            }
+            true => {
+                warn!(
                 "User specified max_size = {}, but the largest file in the pack is {}! Some files will be skipped!",
                 config.max_size.file_size(file_size_opts::BINARY).unwrap(),
                 largest_file.file_size(file_size_opts::BINARY).unwrap(),
             );
-            Ok(())
+                Ok(())
+            }
         }
+    } else {
+        Ok(())
     }
 }
 
@@ -739,7 +755,7 @@ async fn main() -> Result<()> {
             Arg::with_name("ignore_warning")
                 .short("f")
                 .long("force")
-                .help("Force rpl to ignore warning about max_size being too small"),
+                .help("Force rpl to skip files that has size larger than max_size"),
         )
         .arg(
             Arg::with_name("seed_enable")
@@ -791,14 +807,14 @@ async fn main() -> Result<()> {
                 .long("qbul")
                 .value_name("VALUE")
                 .takes_value(true)
-                .help("Set the upload limit for torrents in qBittorrent (bytes/second)"),
+                .help("Set the upload limit for torrents in qBittorrent (value/second)"),
         )
         .arg(
             Arg::with_name("qbittorrent_download_limit")
                 .long("qbdl")
                 .value_name("VALUE")
                 .takes_value(true)
-                .help("Set the download limit for torrents in qBittorrent (bytes/second)"),
+                .help("Set the download limit for torrents in qBittorrent (value/second)"),
         )
         .arg(
             Arg::with_name("rclone_transfers")
@@ -806,14 +822,14 @@ async fn main() -> Result<()> {
                 .long("transfers")
                 .value_name("TRANSFERS")
                 .takes_value(true)
-                .help("Configure the number of transfers"),
+                .help("Set the number of rclone's transfers"),
         )
         .arg(
             Arg::with_name("rclone_drive_chunk_size")
                 .long("drive-chunk-size")
                 .value_name("SIZE")
                 .takes_value(true)
-                .help("Configure the drive chunk size value (in MiB)"),
+                .help("Set the rclone's drive chunk size value (in MiB)"),
         )
         .get_matches();
 
