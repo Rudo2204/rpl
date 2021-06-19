@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use backoff::future::retry;
+use backoff::ExponentialBackoff;
 use derive_builder::Builder;
 use derive_getters::Getters;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -167,13 +169,17 @@ impl QbitConfig {
             .default_headers(headers)
             .build()?;
 
-        let response = client
-            .get(&format!(
-                "{}/api/v2/auth/login?username={}&password={}",
-                address, username, password
-            ))
-            .send()
-            .await?;
+        let response = retry(ExponentialBackoff::default(), || async {
+            let res = client
+                .get(&format!(
+                    "{}/api/v2/auth/login?username={}&password={}",
+                    address, username, password
+                ))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         let headers = match response.headers().get("set-cookie") {
             Some(header) => header,
@@ -199,12 +205,16 @@ impl QbitConfig {
     }
 
     pub async fn application_version(&self) -> Result<String, error::Error> {
-        let res = self
-            .client
-            .get(&format!("{}/api/v2/app/version", self.address))
-            .headers(self.make_headers()?)
-            .send()
-            .await?;
+        let res = retry(ExponentialBackoff::default(), || async {
+            let res = self
+                .client
+                .get(&format!("{}/api/v2/app/version", self.address))
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         match res.error_for_status_ref() {
             Ok(_) => {
@@ -221,14 +231,19 @@ impl QbitConfig {
         Ok(headers)
     }
 
-    pub async fn add_new_torrent(&self, data: QbitTorrent) -> Result<(), error::Error> {
-        let res = self
-            .client
-            .post(&format!("{}/api/v2/torrents/add", self.address))
-            .multipart(data.build_form())
-            .headers(self.make_headers()?)
-            .send()
-            .await?;
+    pub async fn add_new_torrent(&self, data: &QbitTorrent) -> Result<(), error::Error> {
+        // cannot do async move |data| here because https://github.com/rust-lang/rust/issues/62290
+        let res = retry(ExponentialBackoff::default(), || async {
+            let res = self
+                .client
+                .post(&format!("{}/api/v2/torrents/add", self.address))
+                .multipart(data.clone().build_form()) // TODO: find a way to not clone
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         match res.error_for_status() {
             Ok(_) => {
@@ -246,17 +261,21 @@ impl QbitConfig {
         files: &str,
         priority: u8,
     ) -> Result<(), error::Error> {
-        let form = Form::new()
-            .text("hash", hash.to_string())
-            .text("id", files.to_string())
-            .text("priority", priority.to_string());
-        let res = self
-            .client
-            .post(&format!("{}/api/v2/torrents/filePrio", self.address))
-            .multipart(form)
-            .headers(self.make_headers()?)
-            .send()
-            .await?;
+        let res = retry(ExponentialBackoff::default(), || async {
+            let form = Form::new()
+                .text("hash", hash.to_string())
+                .text("id", files.to_string())
+                .text("priority", priority.to_string());
+            let res = self
+                .client
+                .post(&format!("{}/api/v2/torrents/filePrio", self.address))
+                .multipart(form)
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         match res.error_for_status() {
             Ok(_) => Ok(()),
@@ -265,15 +284,19 @@ impl QbitConfig {
     }
 
     pub async fn resume_torrent(&self, hash: &str) -> Result<(), error::Error> {
-        let form = Form::new().text("hashes", hash.to_string());
+        let res = retry(ExponentialBackoff::default(), || async {
+            let form = Form::new().text("hashes", hash.to_string());
 
-        let res = self
-            .client
-            .post(&format!("{}/api/v2/torrents/resume", self.address))
-            .multipart(form)
-            .headers(self.make_headers()?)
-            .send()
-            .await?;
+            let res = self
+                .client
+                .post(&format!("{}/api/v2/torrents/resume", self.address))
+                .multipart(form)
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         match res.error_for_status() {
             Ok(_) => {
@@ -286,17 +309,21 @@ impl QbitConfig {
     }
 
     pub async fn delete_torrent(&self, hash: &str, delete_files: bool) -> Result<(), error::Error> {
-        let form = Form::new()
-            .text("hashes", hash.to_string())
-            .text("deleteFiles", delete_files.to_string());
+        let res = retry(ExponentialBackoff::default(), || async {
+            let form = Form::new()
+                .text("hashes", hash.to_string())
+                .text("deleteFiles", delete_files.to_string());
 
-        let res = self
-            .client
-            .post(&format!("{}/api/v2/torrents/delete", self.address))
-            .multipart(form)
-            .headers(self.make_headers()?)
-            .send()
-            .await?;
+            let res = self
+                .client
+                .post(&format!("{}/api/v2/torrents/delete", self.address))
+                .multipart(form)
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         match res.error_for_status() {
             Ok(_) => {
@@ -309,17 +336,21 @@ impl QbitConfig {
     }
 
     pub async fn get_torrent_info(&self, hash: &str) -> Result<QbitTorrentInfo, error::Error> {
-        let res = self
-            .client
-            .get(&format!(
-                "{}/api/v2/torrents/info?hashes={}&limit=1",
-                self.address, hash
-            ))
-            .headers(self.make_headers()?)
-            .send()
-            .await?
-            .bytes()
-            .await?;
+        let res = retry(ExponentialBackoff::default(), || async {
+            let res = self
+                .client
+                .get(&format!(
+                    "{}/api/v2/torrents/info?hashes={}&limit=1",
+                    self.address, hash
+                ))
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?
+                .bytes()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         let all_torrents: Vec<QbitTorrentInfo> = serde_json::from_slice(&res)?;
         let ret_torrent = all_torrents.into_iter().next();
@@ -330,18 +361,22 @@ impl QbitConfig {
     }
 
     pub async fn set_share_limit(&self, hash: &str) -> Result<(), error::Error> {
-        let form = Form::new()
-            .text("hashes", hash.to_string())
-            .text("ratioLimit", "-1")
-            .text("seedingTimeLimit", "-1");
+        let res = retry(ExponentialBackoff::default(), || async {
+            let form = Form::new()
+                .text("hashes", hash.to_string())
+                .text("ratioLimit", "-1")
+                .text("seedingTimeLimit", "-1");
 
-        let res = self
-            .client
-            .post(&format!("{}/api/v2/torrents/setShareLimits", self.address))
-            .multipart(form)
-            .headers(self.make_headers()?)
-            .send()
-            .await?;
+            let res = self
+                .client
+                .post(&format!("{}/api/v2/torrents/setShareLimits", self.address))
+                .multipart(form)
+                .headers(self.make_headers().expect("Could not construct headers"))
+                .send()
+                .await?;
+            Ok(res)
+        })
+        .await?;
 
         match res.error_for_status() {
             Ok(_) => {
@@ -355,6 +390,7 @@ impl QbitConfig {
 }
 
 impl QbitTorrent {
+    // consume QbitTorrent, return a Form
     fn build_form(self) -> Form {
         let mut form = Form::new();
         form = match self.urls {
@@ -399,11 +435,6 @@ impl QbitTorrent {
         };
         form
     }
-
-    //pub fn url(mut self, url: String) -> Self {
-    //    self.urls = Some(url);
-    //    self
-    //}
 
     pub fn torrents(mut self, torrent: Torrent) -> Self {
         self.torrents = Some(
@@ -489,8 +520,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
                 offset += job.no_files;
                 continue;
             }
-            // TODO: find a way to not clone config every chunk
-            torrent_client.add_new_torrent(config.clone()).await?;
+            torrent_client.add_new_torrent(&config).await?;
             torrent_client.set_share_limit(&hash).await?;
             let disable_others = &job.disable_others(offset, no_all_files);
             match disable_others {
@@ -526,7 +556,7 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
             let seed_config = config.skip_hash_checking(true).save_path(PathBuf::from(
                 shellexpand::full(seed.seed_path()).unwrap().into_owned(),
             ));
-            torrent_client.add_new_torrent(seed_config).await?;
+            torrent_client.add_new_torrent(&seed_config).await?;
             torrent_client.set_share_limit(&hash).await?;
             torrent_client.resume_torrent(&hash).await?;
         }
