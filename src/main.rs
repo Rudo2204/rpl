@@ -27,12 +27,12 @@ use librpl::{RplLeech, SeedSettings};
 pub const PROGRAM_NAME: &str = "rpl";
 const STOCK_CONFIG: &str = r#"[rpl]
 # rpl will use this percentage of available disk space as max_size
-# value range: 1-100, or 0 to use max_size value instead
+# value range: 1-100, or 0 to use max_size value instead (recommended)
 max_size_percentage = 0
-# max_size value allowed, if max_size_percentage is a positive number
-# then this field will have no effect
+# maximum size per chunk allowed for rpl. The bigger the value, the faster the download speed
+# if max_size_percentage is > 0 then this field will have no effect
 max_size = "5 GiB"
-# only qbittorrent is available atm
+# only qbittorrent is available at the moment
 torrent_client = "qbittorrent"
 # rclone or other rclone's variants (fclone, gclone, xclone) used for uploading
 upload_client = "rclone"
@@ -41,7 +41,7 @@ upload_client = "rclone"
 save_path = ""
 # [REQUIRED] rclone remote path for uploading. Example: "nugu:/rpl"
 remote_path = ""
-# Skip files that have size larger than max_size
+# Force rpl to skip files that have size larger than max_size
 ignore_warning = false
 
 [seed_settings]
@@ -55,11 +55,11 @@ seed_path = ""
 seed_wait = 20
 
 [qbittorrent]
-# default username of qbittorrent Web UI
+# username of qbittorrent Web UI
 username = "admin"
-# default password of qbittorrent Web UI
+# password of qbittorrent Web UI
 password = "adminadmin"
-# default address of qbittorrent Web UI
+# address of qbittorrent Web UI
 address = "http://localhost:8080"
 # upload_limit for torrents added (0 for unlimited) (unit: bytes/second)
 upload_limit = 0
@@ -77,6 +77,7 @@ drive_chunk_size = 64
 # rclone copy --exclude "*.parts" --exclude "*.!qB" --verbose --stats 1s \
 # --use-json-log --transfers 8 --drive-chunk-size 64M <save_path> <remote_path>
 # you can add more custom flags here, but do not override rpl's flags.
+# the flags and their args must be in the correct order, like see example below
 extra_custom_flags = ["--exclude", "RARBG_DO_NOT_MIRROR.exe"]"#;
 
 fn setup_logging(verbosity: u64, chain: bool, log_path: Option<&str>) -> Result<Option<&str>> {
@@ -473,7 +474,7 @@ fn get_qb_config(
     };
 
     let upload_limit: i64 = if let Some(val) = matches.value_of("qbittorrent_upload_limit") {
-        val.parse().expect("Invalid download limit")
+        val.parse().expect("Invalid upload limit")
     } else {
         file_config.qbittorrent.upload_limit
     };
