@@ -230,7 +230,8 @@ impl RplQbitConfig {
     }
 }
 
-// TODO: more configs?
+// TODO: find a way to override extra_custom_flags from clap arg parsing
+// then we will remove transfers and drive_chunk_size from this struct
 #[derive(Serialize, Deserialize, Getters)]
 struct RplRcloneConfig {
     transfers: u16,
