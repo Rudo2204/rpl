@@ -1,6 +1,6 @@
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Request Error when talking to qbittorrent: {0}")]
+    #[error("Request Error when talking to qBittorrent: {0}")]
     ReqErr(#[from] reqwest::Error),
     #[error("Could not convert reqwest header to string: {0}")]
     ToStringError(#[from] reqwest::header::ToStrError),
