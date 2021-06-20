@@ -28,8 +28,10 @@ pub enum Error {
     MaxSizeAllowedTooSmall,
     #[error("Invalid max_size_percentage, allowed value are 0-100")]
     InvalidMaxSizePercentage,
-    #[error("qBittorrent client: The torrent has entered unimplemented state!")]
-    QbitTorrentUnimplementedState,
+    #[error("qBittorrent client: The torrent has entered unknown state!")]
+    QbitTorrentUnknownState,
+    #[error("qBittorrent client: The torrent has entered missing files state!")]
+    QbitTorrentMissingFilesState,
     #[error("Config error: Unsupported torrent client")]
     UnsupportedTorrentClient,
     #[error("Config error: mount path does not exist")]

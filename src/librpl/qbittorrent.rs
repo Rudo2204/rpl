@@ -663,7 +663,7 @@ impl RplQbit for Job {
                             error!(
                                 "The torrent did not leave Unknown state after 5s + retry attempt."
                             );
-                            return Err(error::Error::QbitTorrentErrored);
+                            return Err(error::Error::QbitTorrentUnknownState);
                         }
                         _ => continue,
                     }
@@ -693,7 +693,7 @@ impl RplQbit for Job {
                         continue;
                     } else {
                         error!("qBittorrent entered MissingFiles error state!");
-                        return Err(error::Error::QbitTorrentErrored);
+                        return Err(error::Error::QbitTorrentMissingFilesState);
                     }
                 }
                 State::Downloading => {
@@ -721,7 +721,7 @@ impl RplQbit for Job {
                     ));
                     pb.set_position(min(size - current_info.amount_left, size) as u64);
                 }
-                State::CheckingDL => {
+                State::CheckingDL | State::CheckingResumeData => {
                     pb.set_message(format!(
                         "[Checking] Downloading chunk {}/{}",
                         self.chunk, no_jobs
@@ -734,10 +734,6 @@ impl RplQbit for Job {
                 | State::QueuedUP
                 | State::ForcedUP
                 | State::CheckingUP => return Ok(()),
-                State::CheckingResumeData => {
-                    error!("qBittorrent entered unexpected CheckingResumeData state (should only happen at qBittorrent startup)");
-                    return Err(error::Error::QbitTorrentUnimplementedState);
-                }
             }
 
             sleep(Duration::from_millis(1000)).await;
