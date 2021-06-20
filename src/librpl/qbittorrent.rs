@@ -644,7 +644,25 @@ impl RplQbit for Job {
                     let retry_state = retry_current_info.state();
                     match retry_state {
                         State::PausedDL => {
-                            error!("The torrent did not leave PausedDL state after 5s of retry attempt. Maybe it has been manually paused by the user!");
+                            error!("The torrent did not leave PausedDL state after 5s + retry attempt. Maybe it has been manually paused by the user!");
+                            return Err(error::Error::QbitTorrentErrored);
+                        }
+                        _ => continue,
+                    }
+                }
+                State::Unknown => {
+                    warn!("qBittorrent entered Unknown state. Will now wait 5s and try again...");
+                    sleep(Duration::from_millis(5000)).await;
+
+                    client.resume_torrent(hash).await?;
+
+                    let retry_current_info = client.get_torrent_info(hash).await?;
+                    let retry_state = retry_current_info.state();
+                    match retry_state {
+                        State::Unknown => {
+                            error!(
+                                "The torrent did not leave Unknown state after 5s + retry attempt."
+                            );
                             return Err(error::Error::QbitTorrentErrored);
                         }
                         _ => continue,
@@ -716,8 +734,8 @@ impl RplQbit for Job {
                 | State::QueuedUP
                 | State::ForcedUP
                 | State::CheckingUP => return Ok(()),
-                _ => {
-                    error!("qBittorrent entered unexpected {:?} state", state);
+                State::CheckingResumeData => {
+                    error!("qBittorrent entered unexpected CheckingResumeData state (should only happen at qBittorrent startup)");
                     return Err(error::Error::QbitTorrentUnimplementedState);
                 }
             }
