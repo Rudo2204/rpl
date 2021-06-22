@@ -11,12 +11,12 @@ use crate::librpl::{Job, RplUpload};
 // rclone copy --stats 1s --use-json-log --verbose <src> <dst> 3>&1 2>&3- | tee -a log
 #[derive(Debug, Deserialize)]
 struct RcloneCopyResp {
-    level: String,
-    msg: String,
-    source: String,
-    stats: RcloneStatsResp,
+    level: Option<String>,
+    msg: Option<String>,
+    source: Option<String>,
+    stats: Option<RcloneStatsResp>,
     // Can be deser to Chrono::Datetime using Datetime::parse_from_rfc3339(self.time).unwrap();
-    time: String,
+    time: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,7 +34,7 @@ struct RcloneStatsResp {
     fatal_error: Option<bool>,
     renames: Option<u32>,
     #[serde(rename = "retryError")]
-    retry_error: bool,
+    retry_error: Option<bool>,
     speed: Option<f32>,
     #[serde(rename = "totalBytes")]
     total_bytes: Option<u64>,
@@ -93,10 +93,12 @@ impl RplUpload for Job {
             .filter(|line| line.contains("ETA"))
             .for_each(|line| {
                 let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
-                if let Some(speed) = resp.stats.speed {
-                    if speed > 0f32 {
-                        pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
-                        pb.set_position(resp.stats.bytes);
+                if let Some(stats) = resp.stats {
+                    if let Some(speed) = stats.speed {
+                        if speed > 0f32 {
+                            pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
+                            pb.set_position(stats.bytes);
+                        }
                     }
                 }
             });
