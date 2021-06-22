@@ -37,7 +37,7 @@ pub async fn wait_with_progress(wait_time: u32) {
     let pb = ProgressBar::new(wait_time as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} {msg} [{bar:30.cyan/blue}] ({eta_precise})")
+            .template("{spinner:.green} {msg} [{bar:20.cyan/blue}] ({eta_precise})")
             .progress_chars("#>-"),
     );
 

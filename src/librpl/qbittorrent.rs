@@ -604,7 +604,7 @@ impl RplQbit for Job {
 
         let pb = ProgressBar::new(size as u64);
         pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:30.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
+            .template("{spinner:.green} {msg} [{elapsed_precise}] [{bar:20.cyan/blue}] {bytes}/{total_bytes} [{binary_bytes_per_sec}] ({eta})")
             .progress_chars("#>-"));
 
         pb.set_message(format!(
