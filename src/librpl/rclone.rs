@@ -50,8 +50,8 @@ struct RcloneStatsResp {
 
 #[derive(Debug, Deserialize)]
 struct RcloneTransferring {
-    name: String,
-    size: u64,
+    name: Option<String>,
+    size: Option<u64>,
     bytes: Option<u64>,
     eta: Option<u64>,
     group: Option<String>,
