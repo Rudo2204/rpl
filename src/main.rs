@@ -409,18 +409,18 @@ fn get_running_config(
         }
     };
 
-    let max_size_possible: u64 = match fs2::available_space(PathBuf::from(
-        shellexpand::full(&file_config.rpl.save_path)
-            .unwrap()
-            .into_owned(),
-    )) {
-        Ok(size) => size,
-        Err(_e) => return Err(error::Error::DiskSpaceReadError),
-    };
-
     let max_size_allow: u64 = if let Some(percentage) = matches.value_of("max_size_percentage") {
         let p: u64 = percentage.parse::<u64>().unwrap();
         if p > 0 && p <= 100 {
+            let max_size_possible: u64 = match fs2::available_space(PathBuf::from(
+                shellexpand::full(&file_config.rpl.save_path)
+                    .unwrap()
+                    .into_owned(),
+            )) {
+                Ok(size) => size,
+                Err(_e) => return Err(error::Error::DiskSpaceReadError),
+            };
+
             max_size_possible * p / 100
         } else {
             return Err(error::Error::InvalidMaxSizePercentage);
@@ -428,6 +428,15 @@ fn get_running_config(
     } else if let Some(size) = matches.value_of("max_size") {
         parse_size(size).expect("Could not parse max_size from input")
     } else if file_config.max_size_percentage_used().unwrap() {
+        let max_size_possible: u64 = match fs2::available_space(PathBuf::from(
+            shellexpand::full(&file_config.rpl.save_path)
+                .unwrap()
+                .into_owned(),
+        )) {
+            Ok(size) => size,
+            Err(_e) => return Err(error::Error::DiskSpaceReadError),
+        };
+
         max_size_possible * (file_config.rpl.max_size_percentage as u64) / 100
     } else {
         parse_size(&file_config.rpl.max_size).expect("Could not parse max_size in file config")
