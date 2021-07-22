@@ -1,6 +1,6 @@
 [package]
 name = "rpl"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Rudo2204 <rudo2204@gmail.com>"]
 edition = "2018"
 description = "Rudo's pack leecher: leech large packs with small machines"
