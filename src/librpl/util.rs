@@ -9,7 +9,7 @@ pub fn get_conf_dir(
     organization: &str,
     application: &str,
 ) -> anyhow::Result<PathBuf> {
-    let proj_dirs = ProjectDirs::from(&qualifier, &organization, &application)
+    let proj_dirs = ProjectDirs::from(qualifier, organization, application)
         .expect("Could not retrieve ProjectDirs, maybe you are using an unsupported OS");
     Ok(proj_dirs.config_dir().to_path_buf())
 }
@@ -19,7 +19,7 @@ pub fn create_proj_conf(
     organization: &str,
     application: &str,
 ) -> anyhow::Result<()> {
-    let proj_dirs = ProjectDirs::from(&qualifier, &organization, &application)
+    let proj_dirs = ProjectDirs::from(qualifier, organization, application)
         .expect("Could not retrieve ProjectDirs, maybe you are using an unsupported OS");
     let conf_dir = proj_dirs.config_dir();
 

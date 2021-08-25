@@ -97,7 +97,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                         return Err(error::Error::MaxSizeAllowedTooSmall);
                     }
                 } else {
-                    chunks.insert(path, RplFile::new(&path, size, 1));
+                    chunks.insert(path, RplFile::new(path, size, 1));
                     return Ok(chunks);
                 }
             }
@@ -148,7 +148,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
 
                 chunks.insert(
                     file.path.to_str().unwrap(),
-                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                    RplFile::new(file.path.to_str().unwrap(), file.length, current_chunk),
                 );
                 debug!(
                     "Added {} size {} index {} chunk {}",
@@ -167,7 +167,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                 );
                 chunks.insert(
                     file.path.to_str().unwrap(),
-                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                    RplFile::new(file.path.to_str().unwrap(), file.length, current_chunk),
                 );
                 current_sum_size += file.length;
             } else {
@@ -183,7 +183,7 @@ impl<'a> RplChunk<'a> for TorrentPack {
                 );
                 chunks.insert(
                     file.path.to_str().unwrap(),
-                    RplFile::new(&file.path.to_str().unwrap(), file.length, current_chunk),
+                    RplFile::new(file.path.to_str().unwrap(), file.length, current_chunk),
                 );
             }
         }

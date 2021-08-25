@@ -674,7 +674,7 @@ impl RplQbit for Job {
                         sleep(Duration::from_millis(5000)).await;
                         info!("Retrying {}/3 times", retry);
                         retry += 1;
-                        client.resume_torrent(&hash).await?;
+                        client.resume_torrent(hash).await?;
                         continue;
                     } else {
                         error!("qBittorrent entered Error state!");
@@ -689,7 +689,7 @@ impl RplQbit for Job {
                         sleep(Duration::from_millis(5000)).await;
                         info!("Retrying {}/3 times", retry);
                         retry += 1;
-                        client.resume_torrent(&hash).await?;
+                        client.resume_torrent(hash).await?;
                         continue;
                     } else {
                         error!("qBittorrent entered MissingFiles error state!");
