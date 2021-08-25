@@ -27,15 +27,15 @@ struct RcloneStatsResp {
     deleted_dirs: Option<u32>,
     deletes: Option<u32>,
     #[serde(rename = "elapsedTime")]
-    elapsed_time: Option<f32>,
+    elapsed_time: Option<f64>,
     errors: Option<u32>,
-    eta: Option<u64>,
+    eta: Option<f64>,
     #[serde(rename = "fatalError")]
     fatal_error: Option<bool>,
     renames: Option<u32>,
     #[serde(rename = "retryError")]
     retry_error: Option<bool>,
-    speed: Option<f32>,
+    speed: Option<f64>,
     #[serde(rename = "totalBytes")]
     total_bytes: Option<u64>,
     #[serde(rename = "totalChecks")]
@@ -43,7 +43,7 @@ struct RcloneStatsResp {
     #[serde(rename = "totalTransfers")]
     total_transfers: Option<u64>,
     #[serde(rename = "transferTime")]
-    transfer_time: Option<f32>,
+    transfer_time: Option<f64>,
     transferring: Option<Vec<RcloneTransferring>>,
     transfers: Option<u32>,
 }
@@ -95,7 +95,7 @@ impl RplUpload for Job {
                 let resp: RcloneCopyResp = serde_json::from_str(&line).unwrap();
                 if let Some(stats) = resp.stats {
                     if let Some(speed) = stats.speed {
-                        if speed > 0f32 {
+                        if speed > 0f64 {
                             pb.set_message(format!("Uploading chunk {}/{}", self.chunk, no_jobs));
                             pb.set_position(stats.bytes);
                         }
