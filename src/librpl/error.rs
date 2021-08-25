@@ -1,3 +1,4 @@
+#![allow(clippy::enum_variant_names)]
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Request Error when talking to qBittorrent: {0}")]
