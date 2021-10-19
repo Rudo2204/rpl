@@ -539,6 +539,8 @@ impl<'a> RplLeech<'a, TorrentPack, QbitTorrent, QbitConfig> for TorrentPack {
             info!("Finished uploading chunk {}/{}", job.chunk, no_jobs);
 
             torrent_client.delete_torrent(&hash, true).await?;
+            info!("Sleeping 60s for tracker to refresh...");
+            sleep(Duration::from_millis(60000)).await;
 
             offset += job.no_files;
         }
