@@ -35,7 +35,6 @@ backoff = { version = "0.3", features = ["futures", "tokio"] }
 openssl = { version = '0.10', optional = true }
 
 [features]
-default = ["reqwest/default-tls", "trust-dns-resolver/dns-over-native-tls"]
 vendored-openssl = ["openssl/vendored"]
 rustls = ["reqwest/rustls-tls", "trust-dns-resolver/dns-over-rustls"]
 
