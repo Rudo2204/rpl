@@ -144,7 +144,7 @@ jobs:
           use-cross: ${{ matrix.triple.cross }}
 
       - name: Optionally strip and upx
-        if: ${{ !matrix.triple.upx }}
+        if: ${{ !matrix.triple.cross }}
         uses: svenstaro/upx-action@2.0.1
         with:
           file: target/${{ matrix.triple.target }}/release/${{ env.BINARY_NAME }}${{ matrix.triple.suffix }}
