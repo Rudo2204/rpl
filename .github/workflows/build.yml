@@ -92,34 +92,29 @@ jobs:
               os: "ubuntu-latest",
               target: "x86_64-unknown-linux-gnu",
               cross: false,
-              upx: true,
             }
           - {
               os: "windows-latest",
               target: "x86_64-pc-windows-msvc",
               cross: false,
               suffix: ".exe",
-              upx: true,
             }
           - {
               os: "macOS-latest",
               target: "x86_64-apple-darwin",
               cross: false,
-              upx: true,
             }
           - {
               os: "ubuntu-latest",
               target: "aarch64-unknown-linux-gnu",
               ssl: "--features vendored-openssl",
               cross: true,
-              upx: false,
             }
           - {
               os: "ubuntu-latest",
               target: "armv7-unknown-linux-gnueabihf",
               ssl: "--features vendored-openssl",
               cross: true,
-              upx: false,
             }
 
     steps:
@@ -148,8 +143,9 @@ jobs:
           args: --release ${{ matrix.triple.ssl }} --target=${{ matrix.triple.target }}
           use-cross: ${{ matrix.triple.cross }}
 
-      - uses: svenstaro/upx-action@2.0.1
-        if: $${{ matrix.triple.upx }}
+      - name: Optionally strip and upx
+        if: ${{ !matrix.triple.upx }}
+        uses: svenstaro/upx-action@2.0.1
         with:
           file: target/${{ matrix.triple.target }}/release/${{ env.BINARY_NAME }}${{ matrix.triple.suffix }}
           args: --best
