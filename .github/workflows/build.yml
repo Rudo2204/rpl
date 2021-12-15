@@ -1,6 +1,7 @@
 # https://github.com/rust-lang/rust/blob/master/.github/workflows/ci.yml
 # https://github.com/launchbadge/sqlx/blob/master/.github/workflows/sqlx.yml
 # https://github.com/dh1tw/remoteAudio/blob/master/.github/workflows/build.yml
+# https://github.com/ClementTsang/bottom/blob/master/.github/workflows/ci.yml
 # https://github.com/actions-rs
 # TODO: Set CRATE_NAME to match the project name
 name: CI
@@ -81,18 +82,35 @@ jobs:
     needs: check
     name: Build
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
 
     strategy:
       matrix:
+        fail-fast: false
         os: [ubuntu-latest, windows-latest, macOS-latest]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            cross: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            cross: false
             suffix: .exe
           - os: macOS-latest
             target: x86_64-apple-darwin
+            cross: false
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            cross: true
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            cross: true
+          - os: ubuntu-latest
+            target: arm-unknown-linux-gnueabihf
+            cross: true
+          - os: ubuntu-latest
+            target: aarch64-apple-darwin
+            cross: true
 
     steps:
       - uses: actions/checkout@v2
@@ -111,12 +129,14 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.target }}
           override: true
 
       - uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target=${{ matrix.target }}
+          use-cross: ${{ matrix.cross }}
 
       - uses: svenstaro/upx-action@2.0.1
         with:
