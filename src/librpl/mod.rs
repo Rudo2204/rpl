@@ -21,6 +21,8 @@ pub trait RplPackConfig {}
 
 #[derive(Debug)]
 pub struct RplFile<'a> {
+    // Might use this in the future
+    #[allow(dead_code)]
     filename: &'a str,
     length: i64,
     chunk: i32,

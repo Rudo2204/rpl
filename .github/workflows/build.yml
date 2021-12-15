@@ -1,6 +1,7 @@
 # https://github.com/rust-lang/rust/blob/master/.github/workflows/ci.yml
 # https://github.com/launchbadge/sqlx/blob/master/.github/workflows/sqlx.yml
 # https://github.com/dh1tw/remoteAudio/blob/master/.github/workflows/build.yml
+# https://github.com/ClementTsang/bottom/blob/master/.github/workflows/ci.yml
 # https://github.com/actions-rs
 # TODO: Set CRATE_NAME to match the project name
 name: CI
@@ -80,19 +81,41 @@ jobs:
   build:
     needs: check
     name: Build
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.triple.os }}
+    continue-on-error: true
 
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: .exe
-          - os: macOS-latest
-            target: x86_64-apple-darwin
+        triple:
+          - {
+              os: "ubuntu-latest",
+              target: "x86_64-unknown-linux-gnu",
+              cross: false,
+            }
+          - {
+              os: "windows-latest",
+              target: "x86_64-pc-windows-msvc",
+              cross: false,
+              suffix: ".exe",
+            }
+          - {
+              os: "macOS-latest",
+              target: "x86_64-apple-darwin",
+              cross: false,
+            }
+          - {
+              os: "ubuntu-latest",
+              target: "aarch64-unknown-linux-gnu",
+              ssl: "--features vendored-openssl",
+              cross: true,
+            }
+          - {
+              os: "ubuntu-latest",
+              target: "armv7-unknown-linux-gnueabihf",
+              ssl: "--features vendored-openssl",
+              cross: true,
+            }
 
     steps:
       - uses: actions/checkout@v2
@@ -111,23 +134,27 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.triple.target }}
           override: true
 
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release --target=${{ matrix.target }}
+          args: --release ${{ matrix.triple.ssl }} --target=${{ matrix.triple.target }}
+          use-cross: ${{ matrix.triple.cross }}
 
-      - uses: svenstaro/upx-action@2.0.1
+      - name: Optionally strip and upx
+        if: ${{ !matrix.triple.cross }}
+        uses: svenstaro/upx-action@2.0.1
         with:
-          file: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.suffix }}
+          file: target/${{ matrix.triple.target }}/release/${{ env.BINARY_NAME }}${{ matrix.triple.suffix }}
           args: --best
           strip: true
 
       - uses: actions/upload-artifact@master
         with:
-          name: ${{ env.CRATE_NAME }}-${{ matrix.target }}${{ matrix.suffix }}
-          path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.suffix }}
+          name: ${{ env.CRATE_NAME }}-${{ matrix.triple.target }}${{ matrix.triple.suffix }}
+          path: target/${{ matrix.triple.target }}/release/${{ env.BINARY_NAME }}${{ matrix.triple.suffix }}
 
       - name: Get VERSION
         if: startsWith(github.ref, 'refs/tags/v')
@@ -142,13 +169,13 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.VERSION }}
         shell: bash
         run: |
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.suffix }} ${{ env.BINARY_NAME }}-$VERSION-${{ matrix.target }}${{ matrix.suffix }}
+          cp target/${{ matrix.triple.target }}/release/${{ env.BINARY_NAME }}${{ matrix.triple.suffix }} ${{ env.BINARY_NAME }}-$VERSION-${{ matrix.triple.target }}${{ matrix.triple.suffix }}
 
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           draft: true
           prerelease: false
-          files: ${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ matrix.target }}${{ matrix.suffix }}
+          files: ${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-${{ matrix.triple.target }}${{ matrix.triple.suffix }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

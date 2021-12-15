@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use backoff::future::retry;
 use backoff::ExponentialBackoff;
 use derive_builder::Builder;
-use derive_getters::Getters;
 use indicatif::{ProgressBar, ProgressStyle};
 use lava_torrent::torrent::v1::Torrent;
 use log::{debug, error, info, warn};
@@ -74,7 +73,8 @@ pub enum State {
     Unknown,
 }
 
-#[derive(Debug, Deserialize, Getters)]
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct QbitTorrentInfo {
     added_on: i64,
     amount_left: i64,
@@ -614,7 +614,7 @@ impl RplQbit for Job {
 
         loop {
             let current_info = client.get_torrent_info(hash).await?;
-            let state = current_info.state();
+            let state = current_info.state;
             match state {
                 State::Moving => {
                     pb.set_message(format!("Moving files of chunk {}/{}", self.chunk, no_jobs));
@@ -641,7 +641,7 @@ impl RplQbit for Job {
                     client.resume_torrent(hash).await?;
 
                     let retry_current_info = client.get_torrent_info(hash).await?;
-                    let retry_state = retry_current_info.state();
+                    let retry_state = retry_current_info.state;
                     match retry_state {
                         State::PausedDL => {
                             error!("The torrent did not leave PausedDL state after 5s + retry attempt. Maybe it has been manually paused by the user!");
@@ -657,7 +657,7 @@ impl RplQbit for Job {
                     client.resume_torrent(hash).await?;
 
                     let retry_current_info = client.get_torrent_info(hash).await?;
-                    let retry_state = retry_current_info.state();
+                    let retry_state = retry_current_info.state;
                     match retry_state {
                         State::Unknown => {
                             error!(

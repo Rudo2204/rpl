@@ -1,5 +1,5 @@
 use indicatif::{ProgressBar, ProgressStyle};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -9,7 +9,7 @@ use crate::librpl::error;
 use crate::librpl::{Job, RplUpload};
 
 // rclone copy --stats 1s --use-json-log --verbose <src> <dst> 3>&1 2>&3- | tee -a log
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RcloneCopyResp {
     level: Option<String>,
     msg: Option<String>,
@@ -19,7 +19,7 @@ struct RcloneCopyResp {
     time: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RcloneStatsResp {
     bytes: u64,
     checks: Option<u32>,
@@ -48,7 +48,7 @@ struct RcloneStatsResp {
     transfers: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RcloneTransferring {
     name: Option<String>,
     size: Option<u64>,
