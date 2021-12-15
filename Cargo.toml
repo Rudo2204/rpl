@@ -32,6 +32,12 @@ parse-size = "1.0.0"
 regex = "1.5.4"
 url = "2.2.2"
 backoff = { version = "0.3", features = ["futures", "tokio"] }
+openssl = { version = '0.10', optional = true }
+
+[features]
+default = ["reqwest/default-tls", "trust-dns-resolver/dns-over-native-tls"]
+vendored-openssl = ["openssl/vendored"]
+rustls = ["reqwest/rustls-tls", "trust-dns-resolver/dns-over-rustls"]
 
 [profile.release]
 panic = "abort"
